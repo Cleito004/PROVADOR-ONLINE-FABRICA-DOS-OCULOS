@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Provador Virtual - Fábrica dos Óculos</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <header>
+      <div class="logo">
+        <span class="logo-icon">&#x1F453;</span>
+        <h1>Provador Virtual</h1>
+      </div>
+      <p class="subtitle">Experimente óculos online com realidade aumentada</p>
+    </header>
+
+    <div id="loading-overlay" class="hidden">
+      <div class="loader">
+        <div class="spinner"></div>
+        <p id="loading-text">Carregando modelo de detecção facial...</p>
+      </div>
+    </div>
+
+    <div id="error-overlay" class="hidden">
+      <div class="error-box">
+        <span class="error-icon">&#x26A0;&#xFE0F;</span>
+        <h2 id="error-title">Algo deu errado</h2>
+        <p id="error-message">Nao foi possivel carregar o modelo de deteccao facial.</p>
+        <button id="retry-btn" class="btn btn-primary">Tente Novamente</button>
+      </div>
+    </div>
+
+    <main>
+      <div id="viewer">
+        <div id="threejs-container"></div>
+        <video id="webcam" autoplay playsinline muted></video>
+        <div id="face-info"></div>
+        <div id="start-prompt">
+          <div class="prompt-content">
+            <span class="prompt-icon">&#x1F4F7;</span>
+            <h2>Ative sua câmera</h2>
+            <p>Posicione seu rosto na frente da câmera para experimentar os óculos virtualmente</p>
+            <button id="start-btn" class="btn btn-primary">Ativar Câmera</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="controls">
+        <div class="control-section">
+          <h3>Modelo</h3>
+          <div class="glasses-list" id="glasses-list">
+            <button class="glasses-option active" data-style="round">
+              <span class="glasses-icon">&#x1F453;</span>
+              <span>Redondo</span>
+            </button>
+            <button class="glasses-option" data-style="square">
+              <span class="glasses-icon">&#x1F453;</span>
+              <span>Quadrado</span>
+            </button>
+            <button class="glasses-option" data-style="aviator">
+              <span class="glasses-icon">&#x1F453;</span>
+              <span>Aviador</span>
+            </button>
+            <button class="glasses-option" data-style="cateye">
+              <span class="glasses-icon">&#x1F453;</span>
+              <span>Gatinho</span>
+            </button>
+            <button class="glasses-option" data-style="sport">
+              <span class="glasses-icon">&#x1F453;</span>
+              <span>Esportivo</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="control-section">
+          <h3>Cor da Armação</h3>
+          <div class="color-list" id="color-list">
+            <button class="color-option active" data-color="#1a1a1a" style="background:#1a1a1a" title="Preto"></button>
+            <button class="color-option" data-color="#8B4513" style="background:#8B4513" title="Marrom"></button>
+            <button class="color-option" data-color="#C0A060" style="background:#C0A060" title="Dourado"></button>
+            <button class="color-option" data-color="#C0C0C0" style="background:#C0C0C0" title="Prata"></button>
+            <button class="color-option" data-color="#DC143C" style="background:#DC143C" title="Vermelho"></button>
+            <button class="color-option" data-color="#4169E1" style="background:#4169E1" title="Azul"></button>
+          </div>
+        </div>
+
+        <div class="control-section">
+          <h3>Cor da Lente</h3>
+          <div class="color-list" id="lens-color-list">
+            <button class="color-option active" data-color="#1a2e1a" data-opacity="0.7" style="background:#1a2e1a" title="Verde G-15"></button>
+            <button class="color-option" data-color="#2a1a2e" data-opacity="0.6" style="background:#2a1a2e" title="Gradiente"></button>
+            <button class="color-option" data-color="#1a1a2e" data-opacity="0.5" style="background:#1a1a2e" title="Azul"></button>
+            <button class="color-option" data-color="#8B4513" data-opacity="0.4" style="background:#8B4513" title="Marrom"></button>
+            <button class="color-option" data-color="#ffcc00" data-opacity="0.3" style="background:#ffcc00" title="Amarelo"></button>
+            <button class="color-option" data-color="#ffffff" data-opacity="0.05" style="background:#ffffff; border:1px solid #ccc" title="Transparente"></button>
+          </div>
+        </div>
+
+        <div class="control-section">
+          <h3>Simulação de Lentes</h3>
+          <div class="lens-effects">
+            <label class="toggle-row">
+              <span>Astigmatismo</span>
+              <input type="checkbox" id="astigmatism-toggle">
+              <span class="toggle-slider"></span>
+            </label>
+            <div class="slider-row" id="cylinder-row">
+              <label>Cilindro: <span id="cylinder-val">0.00</span></label>
+              <input type="range" id="cylinder-slider" min="0" max="4" step="0.25" value="0">
+            </div>
+            <div class="slider-row" id="axis-row">
+              <label>Eixo: <span id="axis-val">0°</span></label>
+              <input type="range" id="axis-slider" min="0" max="180" step="1" value="0">
+            </div>
+            <label class="toggle-row">
+              <span>Filtro Azul</span>
+              <input type="checkbox" id="blue-filter-toggle">
+              <span class="toggle-slider"></span>
+            </label>
+            <div class="slider-row" id="photochromic-row">
+              <label>Fotocromático: <span id="photochromic-val">0%</span></label>
+              <input type="range" id="photochromic-slider" min="0" max="100" step="5" value="0">
+            </div>
+          </div>
+        </div>
+
+        <div class="control-section actions">
+          <button id="test-mode-btn" class="btn btn-outline">
+            <span>&#x1F916;</span> Boneco Teste
+          </button>
+          <button id="screenshot-btn" class="btn btn-secondary">
+            <span>&#x1F4F8;</span> Capturar Foto
+          </button>
+          <button id="reset-btn" class="btn btn-outline">
+            <span>&#x21BB;</span> Resetar
+          </button>
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      <p>Fábrica dos Óculos &copy; 2026 - Provador Virtual</p>
+    </footer>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="script.js"></script>
+</body>
+</html>

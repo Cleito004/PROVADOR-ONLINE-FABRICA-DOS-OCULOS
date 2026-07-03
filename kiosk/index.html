@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
+  <title>Provador Virtual - Fábrica de Óculos</title>
+
+  <link rel="stylesheet" href="css/kiosk.css">
+
+  <!-- WebAR.rocks.face core -->
+  <script src="js/WebARRocksFace.js"></script>
+
+  <!-- Three.js -->
+  <script src="libs/three.js"></script>
+  <script src="libs/GLTFLoader.js"></script>
+  <script src="libs/RGBELoader.js"></script>
+  <script src="libs/EffectComposer.js"></script>
+  <script src="libs/RenderPass.js"></script>
+  <script src="libs/ShaderPass.js"></script>
+  <script src="libs/CopyShader.js"></script>
+  <script src="libs/UnrealBloomPass.js"></script>
+  <script src="libs/LuminosityHighPassShader.js"></script>
+  <script src="libs/SSAARenderPass.js"></script>
+  <script src="libs/TAARenderPass.js"></script>
+
+  <!-- Helpers -->
+  <script src="js/WebARRocksFaceThreeHelper.js"></script>
+  <script src="js/OneEuroLMStabilizer.js"></script>
+  <script src="js/WebARRocksMirror.js"></script>
+  <script src="js/WebARRocksResizer.js"></script>
+
+  <!-- face-api.js -->
+  <script src="js/face-api.min.js"></script>
+</head>
+<body>
+
+  <!-- ========== START SCREEN ========== -->
+  <div id="startScreen" class="screen start-screen">
+    <div class="start-content">
+      <div class="logo-box">
+        <span class="logo-icon">👓</span>
+        <h1>Provador Virtual</h1>
+        <p class="subtitle">Experimente os óculos da nossa fábrica</p>
+      </div>
+
+      <div class="gender-section">
+        <p class="gender-hint">Selecione seu estilo</p>
+        <div class="gender-buttons">
+          <button class="gender-btn" data-gender="female">
+            <span class="gender-icon">👩</span>
+            <span>Feminino</span>
+          </button>
+          <button class="gender-btn" data-gender="male">
+            <span class="gender-icon">👨</span>
+            <span>Masculino</span>
+          </button>
+          <button class="gender-btn active" data-gender="unisex">
+            <span class="gender-icon">👤</span>
+            <span>Unissex</span>
+          </button>
+        </div>
+        <p class="gender-auto">Detecção automática em <span id="autoCountdown">3</span>s</p>
+      </div>
+
+      <button id="startBtn" class="btn-start">
+        <span>📷</span> Iniciar Experiência
+      </button>
+    </div>
+  </div>
+
+  <!-- ========== CAMERA / MIRROR ========== -->
+  <div id="mirrorScreen" class="screen mirror-screen" style="display:none">
+    <canvas id="WebARRocksFaceCanvas"></canvas>
+    <canvas id="threeCanvas"></canvas>
+
+    <!-- Gender badge (silent) -->
+    <div id="genderBadge" class="badge-gender"></div>
+
+    <!-- Vitrine de óculos -->
+    <div id="vitrine" class="vitrine">
+      <button class="vitrine-nav vitrine-prev" id="vitrinePrev">‹</button>
+      <div class="vitrine-track" id="vitrineTrack"></div>
+      <button class="vitrine-nav vitrine-next" id="vitrineNext">›</button>
+    </div>
+
+    <!-- Controls -->
+    <div class="kiosk-controls">
+      <button id="btnCapture" class="ctrl-btn" title="Capturar foto">
+        <span class="ctrl-icon">📸</span>
+      </button>
+      <button id="btnGenderToggle" class="ctrl-btn" title="Trocar gênero">
+        <span class="ctrl-icon">👤</span>
+      </button>
+      <button id="btnReset" class="ctrl-btn" title="Reiniciar">
+        <span class="ctrl-icon">↺</span>
+      </button>
+    </div>
+  </div>
+
+  <script src="js/kiosk.js"></script>
+</body>
+</html>

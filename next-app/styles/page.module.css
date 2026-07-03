@@ -1,0 +1,252 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #0f0f1a;
+  color: #e8e8f0;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  background: #1a1a2e;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logoIcon {
+  font-size: 28px;
+}
+
+.title {
+  font-size: 20px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #6C63FF, #a78bfa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.badge {
+  font-size: 11px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: rgba(108,99,255,0.2);
+  color: #a78bfa;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.viewer {
+  flex: 1;
+  position: relative;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.video {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+  visibility: hidden;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15,15,26,0.85);
+  z-index: 10;
+}
+
+.prompt {
+  text-align: center;
+  max-width: 360px;
+  padding: 32px;
+}
+
+.promptIcon {
+  font-size: 64px;
+  display: block;
+  margin-bottom: 16px;
+  opacity: 0.6;
+}
+
+.prompt h2 {
+  font-size: 22px;
+  margin: 0 0 8px;
+}
+
+.prompt p {
+  color: #8888aa;
+  font-size: 14px;
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+
+.sidebar {
+  width: 280px;
+  background: #1a1a2e;
+  padding: 16px;
+  overflow-y: auto;
+  border-left: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0;
+}
+
+.controlGroup {
+  margin-bottom: 20px;
+}
+
+.controlLabel {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #8888aa;
+  margin: 0 0 10px;
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.optionBtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 8px;
+  background: #25253e;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  color: #8888aa;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.optionBtn:hover {
+  background: #2f2f4e;
+  color: #e8e8f0;
+}
+
+.optionBtn.active {
+  border-color: #6C63FF;
+  color: #e8e8f0;
+  background: rgba(108,99,255,0.15);
+}
+
+.colorGrid {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.colorBtn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 0;
+}
+
+.colorBtn:hover {
+  transform: scale(1.15);
+}
+
+.colorBtn.active {
+  border-color: #6C63FF;
+  box-shadow: 0 0 0 2px #0f0f1a;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-direction: column;
+}
+
+.btnPrimary {
+  padding: 10px 28px;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  background: #6C63FF;
+  color: #fff;
+  transition: all 0.2s;
+}
+
+.btnPrimary:hover {
+  background: #5A52D5;
+  transform: translateY(-1px);
+}
+
+.btnPrimary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btnSecondary, .btnOutline {
+  width: 100%;
+  padding: 10px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s;
+  border: none;
+}
+
+.btnSecondary {
+  background: #25253e;
+  color: #e8e8f0;
+}
+
+.btnSecondary:hover {
+  background: #35355e;
+}
+
+.btnOutline {
+  background: transparent;
+  color: #8888aa;
+  border: 1px solid #25253e;
+}
+
+.btnOutline:hover {
+  border-color: #6C63FF;
+  color: #e8e8f0;
+}

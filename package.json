@@ -1,0 +1,16 @@
+{
+  "name": "provador-online",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Provador Virtual de Óculos - Implementações Next.js e Vue.js",
+  "scripts": {
+    "next:dev": "cd next-app && npm run dev",
+    "next:build": "cd next-app && npm run build",
+    "vue:dev": "cd vue-app && npm run dev",
+    "vue:build": "cd vue-app && npm run build",
+    "backend:dev": "cd backend && npm run dev",
+    "backend:start": "cd backend && npm start",
+    "dev:all": "concurrently \"npm run backend:dev\" \"npm run next:dev\"",
+    "install:all": "cd next-app && npm install && cd ../vue-app && npm install && cd ../backend && npm install"
+  }
+}

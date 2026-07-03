@@ -1,0 +1,12 @@
+kiosk
+node_modules
+.git
+webar-rocks-face
+webar-rocks-face.zip
+jeelizGlassesVTOWidget
+backend
+next-app
+vue-app
+*.ps1
+*.md
+.playwright-mcp
