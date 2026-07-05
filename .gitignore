@@ -43,5 +43,8 @@ mediapipe-models/
 *.7z
 *.rar
 
+# Portable Git inside project
+Git/
+
 # Vercel
 .vercel
