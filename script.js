@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const LM = {
   leftEyeOuter: 33, rightEyeOuter: 263,
@@ -15,6 +16,14 @@ const CFG = {
   glassesDown: 2,
   glassesCenterX: 0,
   glassesScale: 1.2
+};
+
+const STYLE_CFG = {
+  round:   { scale: 1.0, depth: 8,  down: 2, centerX: 0 },
+  square:  { scale: 1.0, depth: 8,  down: 2, centerX: 0 },
+  aviator: { scale: 1.0, depth: 8,  down: 2, centerX: 0 },
+  cateye:  { scale: 1.0, depth: 8,  down: 2, centerX: 0 },
+  sport:   { scale: 1.0, depth: 10, down: 3, centerX: 0 },
 };
 
 let faceLandmarker;
@@ -77,380 +86,75 @@ function showToast(msg) {
   t._hide = setTimeout(() => t.classList.remove('show'), 2500);
 }
 
-// ── Glasses Factory ─────────────────────────────────────────────────────
+// ── GLB Model Loader ──────────────────────────────────────────────────
 
-function buildRoundGlasses(color, lensColor, lensOpacity) {
-  const g = new THREE.Group();
-  const frameMat = new THREE.MeshStandardMaterial({ color: color, metalness: 0.7, roughness: 0.3 });
-  const lensMat = new THREE.MeshPhysicalMaterial({ color: lensColor, transparent: true, opacity: lensOpacity, metalness: 0.05, roughness: 0.02, side: THREE.DoubleSide, depthWrite: false });
-
-  const lw = 48, lh = 40, gap = 16, cx = gap/2 + lw/2;
-
-  [ -cx, cx ].forEach(x => {
-    const shape = new THREE.Shape();
-    const r = lw/2 * 0.9;
-    shape.absellipse(0, 0, r, lh/2 * 0.9, 0, Math.PI*2, false, 0);
-    const geo = new THREE.ShapeGeometry(shape, 32);
-    const lens = new THREE.Mesh(geo, lensMat);
-    lens.userData.isLens = true;
-    lens.position.set(x, 0, 0.3);
-    g.add(lens);
-
-    const pts = [];
-    for (let i = 0; i <= 48; i++) {
-      const a = (i/48)*Math.PI*2;
-      pts.push(new THREE.Vector3(Math.cos(a)*r, Math.sin(a)*lh/2*0.9, 0));
-    }
-    const curve = new THREE.CatmullRomCurve3(pts, true);
-    const tube = new THREE.TubeGeometry(curve, 48, 0.8, 6, true);
-    const rim = new THREE.Mesh(tube, frameMat);
-    rim.position.set(x, 0, 0);
-    g.add(rim);
-  });
-
-  const bridgePts = [
-    new THREE.Vector3(-cx + lw*0.3, lh*0.05, 0.5),
-    new THREE.Vector3(0, lh*0.15, 1),
-    new THREE.Vector3(cx - lw*0.3, lh*0.05, 0.5)
-  ];
-  const bCurve = new THREE.CatmullRomCurve3(bridgePts);
-  const bGeo = new THREE.TubeGeometry(bCurve, 16, 0.8, 6, false);
-  g.add(new THREE.Mesh(bGeo, frameMat));
-
-  [ -1, 1 ].forEach(s => {
-    const pivot = new THREE.Group();
-    const hx = s * (cx + lw*0.35);
-    const armPts = [
-      new THREE.Vector3(0, 0, 0),
-      new THREE.Vector3(0, 0, -30),
-      new THREE.Vector3(0, 0, -55)
-    ];
-    const aCurve = new THREE.CatmullRomCurve3(armPts);
-    const aGeo = new THREE.TubeGeometry(aCurve, 24, 0.9, 6, false);
-    pivot.add(new THREE.Mesh(aGeo, frameMat));
-    pivot.position.set(hx, lh*0.15, 0);
-    pivot.rotation.y = s * 0.08;
-    g.add(pivot);
-  });
-
-  g.traverse(c => { if (c.isMesh) c.renderOrder = 3; });
-  return g;
+const MODEL_CACHE = {}
+const MODEL_URLS = {
+  round: 'core/assets/models/round.glb',
+  square: 'core/assets/models/square.glb',
+  aviator: 'core/assets/models/aviator.glb',
+  cateye: 'core/assets/models/cateye.glb',
+  sport: 'core/assets/models/sport.glb',
+}
+let gltfLoader = null
+function getLoader() {
+  if (!gltfLoader) gltfLoader = new GLTFLoader()
+  return gltfLoader
 }
 
-function buildSquareGlasses(color, lensColor, lensOpacity) {
-  const g = new THREE.Group();
-  const frameMat = new THREE.MeshStandardMaterial({ color: color, metalness: 0.6, roughness: 0.3 });
-  const lensMat = new THREE.MeshPhysicalMaterial({ color: lensColor, transparent: true, opacity: lensOpacity, metalness: 0.05, roughness: 0.02, side: THREE.DoubleSide, depthWrite: false });
+async function loadAllModels() {
+  const loader = getLoader()
+  const entries = Object.entries(MODEL_URLS)
+  await Promise.all(entries.map(([key, url]) => {
+    return new Promise((resolve, reject) => {
+      loader.load(url, gltf => { MODEL_CACHE[key] = gltf.scene; resolve() }, undefined, reject)
+    })
+  }))
+}
 
-  const lw = 48, lh = 36, gap = 16, cx = gap/2 + lw/2, r = 6;
+function buildFromModel(style, frameColor, lensColor, lensOpacity) {
+  const cached = MODEL_CACHE[style]
+  if (!cached) return new THREE.Group()
 
-  function makeLensShape() {
-    const s = new THREE.Shape();
-    const x0 = -lw/2, x1 = lw/2;
-    const y0 = -lh/2, y1 = lh/2;
-    const cr = Math.min(r, lw/2, lh/2);
-    s.moveTo(x0+cr, y0);
-    s.lineTo(x1-cr, y0);
-    s.quadraticCurveTo(x1, y0, x1, y0+cr);
-    s.lineTo(x1, y1-cr);
-    s.quadraticCurveTo(x1, y1, x1-cr, y1);
-    s.lineTo(x0+cr, y1);
-    s.quadraticCurveTo(x0, y1, x0, y1-cr);
-    s.lineTo(x0, y0+cr);
-    s.quadraticCurveTo(x0, y0, x0+cr, y0);
-    return s;
+  const root = cached.clone(true)
+  const frameMat = new THREE.MeshStandardMaterial({ color: frameColor, metalness: 0.6, roughness: 0.3 })
+  const lensMat = new THREE.MeshPhysicalMaterial({
+    color: lensColor, transparent: true, opacity: lensOpacity,
+    metalness: 0.05, roughness: 0.02, side: THREE.DoubleSide, depthWrite: false,
+  })
+
+  let lensCount = 0
+  root.traverse(c => {
+    if (!c.isMesh) return
+    const n = (c.material.name || '').toLowerCase()
+    if (n.includes('lens') || n.includes('glass') || n.includes('visor') || n.includes('lente')) {
+      c.material = lensMat.clone(); lensCount++
+    } else {
+      c.material = frameMat.clone()
+    }
+    c.material.needsUpdate = true; c.renderOrder = 3
+  })
+
+  if (lensCount === 0) {
+    const meshes = []
+    root.traverse(c => { if (c.isMesh) meshes.push(c) })
+    if (meshes.length >= 2) {
+      const sorted = meshes.map(m => {
+        const box = new THREE.Box3().setFromObject(m)
+        const s = box.max.clone().sub(box.min)
+        return { mesh: m, vol: s.x * s.y * s.z }
+      }).sort((a, b) => a.vol - b.vol)
+      const half = Math.max(1, Math.floor(sorted.length / 2))
+      sorted.slice(0, half).forEach(({ mesh }) => { mesh.material = lensMat.clone(); lensCount++ })
+      sorted.slice(half).forEach(({ mesh }) => { mesh.material = frameMat.clone() })
+    } else {
+      meshes.forEach(m => { m.material = frameMat.clone() })
+    }
   }
 
-  [ -cx, cx ].forEach(x => {
-    const shape = makeLensShape();
-    const geo = new THREE.ShapeGeometry(shape, 32);
-    const lens = new THREE.Mesh(geo, lensMat);
-    lens.userData.isLens = true;
-    lens.position.set(x, 0, 0.3);
-    g.add(lens);
-
-    const pts = [];
-    const x0 = -lw/2, x1 = lw/2, y0 = -lh/2, y1 = lh/2, cr = Math.min(r, lw/2, lh/2);
-    pts.push(new THREE.Vector3(x0+cr, y0, 0));
-    pts.push(new THREE.Vector3(x1-cr, y0, 0));
-    pts.push(new THREE.Vector3(x1, y0+cr, 0));
-    pts.push(new THREE.Vector3(x1, y1-cr, 0));
-    pts.push(new THREE.Vector3(x1-cr, y1, 0));
-    pts.push(new THREE.Vector3(x0+cr, y1, 0));
-    pts.push(new THREE.Vector3(x0, y1-cr, 0));
-    pts.push(new THREE.Vector3(x0, y0+cr, 0));
-    const curve = new THREE.CatmullRomCurve3(pts, true);
-    const tube = new THREE.TubeGeometry(curve, 40, 0.8, 6, true);
-    const rim = new THREE.Mesh(tube, frameMat);
-    rim.position.set(x, 0, 0);
-    g.add(rim);
-  });
-
-  const bridgePts = [
-    new THREE.Vector3(-cx + lw*0.25, lh*0.1, 0.5),
-    new THREE.Vector3(0, lh*0.18, 1),
-    new THREE.Vector3(cx - lw*0.25, lh*0.1, 0.5)
-  ];
-  const bCurve = new THREE.CatmullRomCurve3(bridgePts);
-  const bGeo = new THREE.TubeGeometry(bCurve, 16, 0.8, 6, false);
-  g.add(new THREE.Mesh(bGeo, frameMat));
-
-  [ -1, 1 ].forEach(s => {
-    const pivot = new THREE.Group();
-    const hx = s * (cx + lw*0.4);
-    const armPts = [
-      new THREE.Vector3(0, 0, 0),
-      new THREE.Vector3(0, 0, -28),
-      new THREE.Vector3(0, 0, -55)
-    ];
-    const aCurve = new THREE.CatmullRomCurve3(armPts);
-    const aGeo = new THREE.TubeGeometry(aCurve, 24, 0.9, 6, false);
-    pivot.add(new THREE.Mesh(aGeo, frameMat));
-    pivot.position.set(hx, lh*0.1, 0);
-    pivot.rotation.y = s * 0.08;
-    g.add(pivot);
-  });
-
-  g.traverse(c => { if (c.isMesh) c.renderOrder = 3; });
-  return g;
+  root.traverse(c => { if (c.isMesh) c.material.needsUpdate = true })
+  return root
 }
-
-function buildAviatorGlasses(color, lensColor, lensOpacity) {
-  const g = new THREE.Group();
-  const frameMat = new THREE.MeshStandardMaterial({ color: color, metalness: 0.8, roughness: 0.2 });
-  const lensMat = new THREE.MeshPhysicalMaterial({ color: lensColor, transparent: true, opacity: lensOpacity, metalness: 0.05, roughness: 0.02, side: THREE.DoubleSide, depthWrite: false });
-
-  const lw = 50, lh = 38, gap = 14, cx = gap/2 + lw/2;
-
-  function makeAviatorShape() {
-    const s = new THREE.Shape();
-    const hw = lw/2, hh = lh/2;
-    s.moveTo(-hw*0.85, -hh);
-    s.quadraticCurveTo(-hw, -hh*0.2, 0, hh);
-    s.quadraticCurveTo(hw, -hh*0.2, hw*0.85, -hh);
-    return s;
-  }
-
-  [ -cx, cx ].forEach(x => {
-    const shape = makeAviatorShape();
-    const geo = new THREE.ShapeGeometry(shape, 32);
-    const lens = new THREE.Mesh(geo, lensMat);
-    lens.userData.isLens = true;
-    lens.position.set(x, 0, 0.3);
-    g.add(lens);
-
-    const pts = [];
-    const hw = lw/2, hh = lh/2;
-    const n = 48;
-    for (let i = 0; i <= n; i++) {
-      const t = i/n;
-      const angle = t * Math.PI * 2;
-      const y = Math.sin(angle) * hh * 0.95;
-      let xv;
-      if (y < 0) {
-        const p = -y / hh;
-        xv = (hw*0.85 + p * (hw - hw*0.85)) * Math.cos(angle);
-      } else {
-        const p = y / hh;
-        xv = hw * (1 - p*0.15) * Math.cos(angle);
-      }
-      pts.push(new THREE.Vector3(xv, y, 0));
-    }
-    const curve = new THREE.CatmullRomCurve3(pts, true);
-    const tube = new THREE.TubeGeometry(curve, 48, 0.7, 6, true);
-    const rim = new THREE.Mesh(tube, frameMat);
-    rim.position.set(x, 0, 0);
-    g.add(rim);
-  });
-
-  const bridgePts = [
-    new THREE.Vector3(-cx + lw*0.2, lh*0.35, 0.5),
-    new THREE.Vector3(0, lh*0.45, 1.2),
-    new THREE.Vector3(cx - lw*0.2, lh*0.35, 0.5)
-  ];
-  const bCurve = new THREE.CatmullRomCurve3(bridgePts);
-  const bGeo = new THREE.TubeGeometry(bCurve, 16, 0.7, 6, false);
-  g.add(new THREE.Mesh(bGeo, frameMat));
-
-  [ -1, 1 ].forEach(s => {
-    const pivot = new THREE.Group();
-    const hx = s * (cx + lw*0.35);
-    const armPts = [
-      new THREE.Vector3(0, 0, 0),
-      new THREE.Vector3(0, 0, -30),
-      new THREE.Vector3(0, 0, -55)
-    ];
-    const aCurve = new THREE.CatmullRomCurve3(armPts);
-    const aGeo = new THREE.TubeGeometry(aCurve, 24, 0.8, 6, false);
-    pivot.add(new THREE.Mesh(aGeo, frameMat));
-    pivot.position.set(hx, lh*0.25, 0);
-    pivot.rotation.y = s * 0.07;
-    g.add(pivot);
-  });
-
-  g.traverse(c => { if (c.isMesh) c.renderOrder = 3; });
-  return g;
-}
-
-function buildCateyeGlasses(color, lensColor, lensOpacity) {
-  const g = new THREE.Group();
-  const frameMat = new THREE.MeshStandardMaterial({ color: color, metalness: 0.6, roughness: 0.25 });
-  const lensMat = new THREE.MeshPhysicalMaterial({ color: lensColor, transparent: true, opacity: lensOpacity, metalness: 0.05, roughness: 0.02, side: THREE.DoubleSide, depthWrite: false });
-
-  const lw = 48, lh = 34, gap = 16, cx = gap/2 + lw/2;
-
-  function makeCateyeShape() {
-    const s = new THREE.Shape();
-    const hw = lw/2, hh = lh/2;
-    s.moveTo(-hw*0.7, -hh*0.8);
-    s.quadraticCurveTo(-hw, -hh*0.1, -hw*0.85, hh*0.7);
-    s.quadraticCurveTo(-hw*0.5, hh*1.15, -hw*0.3, hh*1.0);
-    s.quadraticCurveTo(0, hh*0.6, hw*0.3, hh*1.0);
-    s.quadraticCurveTo(hw*0.5, hh*1.15, hw*0.85, hh*0.7);
-    s.quadraticCurveTo(hw, -hh*0.1, hw*0.7, -hh*0.8);
-    s.quadraticCurveTo(0, -hh*0.9, -hw*0.7, -hh*0.8);
-    return s;
-  }
-
-  [ -cx, cx ].forEach(x => {
-    const shape = makeCateyeShape();
-    const geo = new THREE.ShapeGeometry(shape, 32);
-    const lens = new THREE.Mesh(geo, lensMat);
-    lens.userData.isLens = true;
-    lens.position.set(x, 0, 0.3);
-    g.add(lens);
-
-    const n = 48;
-    const pts = [];
-    const hw = lw/2, hh = lh/2;
-    for (let i = 0; i <= n; i++) {
-      const t = i/n;
-      const angle = t * Math.PI * 2 - Math.PI/2;
-      const baseY = Math.sin(angle) * hh;
-      const y = baseY;
-      let xv;
-      if (y < 0) {
-        const p = -y / hh;
-        xv = (hw*0.7 + p * (hw - hw*0.7)) * Math.cos(angle);
-      } else {
-        const p = y / hh;
-        const catFactor = 1 + p * 0.5;
-        xv = hw * Math.cos(angle) * catFactor;
-      }
-      pts.push(new THREE.Vector3(xv, y, 0));
-    }
-    const curve = new THREE.CatmullRomCurve3(pts, true);
-    const tube = new THREE.TubeGeometry(curve, 48, 0.7, 6, true);
-    const rim = new THREE.Mesh(tube, frameMat);
-    rim.position.set(x, 0, 0);
-    g.add(rim);
-  });
-
-  const bridgePts = [
-    new THREE.Vector3(-cx + lw*0.2, -lh*0.1, 0.5),
-    new THREE.Vector3(0, 0, 1),
-    new THREE.Vector3(cx - lw*0.2, -lh*0.1, 0.5)
-  ];
-  const bCurve = new THREE.CatmullRomCurve3(bridgePts);
-  const bGeo = new THREE.TubeGeometry(bCurve, 16, 0.7, 6, false);
-  g.add(new THREE.Mesh(bGeo, frameMat));
-
-  [ -1, 1 ].forEach(s => {
-    const pivot = new THREE.Group();
-    const hx = s * (cx + lw*0.4);
-    const armPts = [
-      new THREE.Vector3(0, 0, 0),
-      new THREE.Vector3(0, 0, -28),
-      new THREE.Vector3(0, 0, -55)
-    ];
-    const aCurve = new THREE.CatmullRomCurve3(armPts);
-    const aGeo = new THREE.TubeGeometry(aCurve, 24, 0.8, 6, false);
-    pivot.add(new THREE.Mesh(aGeo, frameMat));
-    pivot.position.set(hx, lh*0.1, 0);
-    pivot.rotation.y = s * 0.07;
-    g.add(pivot);
-  });
-
-  g.traverse(c => { if (c.isMesh) c.renderOrder = 3; });
-  return g;
-}
-
-function buildSportGlasses(color, lensColor, lensOpacity) {
-  const g = new THREE.Group();
-  const frameMat = new THREE.MeshPhysicalMaterial({ color: color, metalness: 0.3, roughness: 0.6 });
-  const lensMat = new THREE.MeshPhysicalMaterial({ color: lensColor, transparent: true, opacity: lensOpacity, metalness: 0.05, roughness: 0.02, side: THREE.DoubleSide, depthWrite: false });
-
-  const lw = 54, lh = 32, gap = 12, cx = gap/2 + lw/2;
-
-  function wrapShape() {
-    const s = new THREE.Shape();
-    const hw = lw/2, hh = lh/2;
-    s.moveTo(-hw*0.95, -hh*0.7);
-    s.quadraticCurveTo(-hw*1.1, 0, -hw*0.9, hh*0.8);
-    s.quadraticCurveTo(-hw*0.5, hh*1.1, 0, hh*0.6);
-    s.quadraticCurveTo(hw*0.5, hh*1.1, hw*0.9, hh*0.8);
-    s.quadraticCurveTo(hw*1.1, 0, hw*0.95, -hh*0.7);
-    s.quadraticCurveTo(0, -hh*0.9, -hw*0.95, -hh*0.7);
-    return s;
-  }
-
-  [ -cx, cx ].forEach(x => {
-    const shape = wrapShape();
-    const geo = new THREE.ShapeGeometry(shape, 32);
-    const lens = new THREE.Mesh(geo, lensMat);
-    lens.userData.isLens = true;
-    lens.position.set(x, 0, 0.3);
-    g.add(lens);
-
-    const pts = [];
-    const hw = lw/2, hh = lh/2;
-    const n = 48;
-    for (let i = 0; i <= n; i++) {
-      const t = i/n;
-      const angle = t * Math.PI*2;
-      const baseY = Math.sin(angle) * hh;
-      let xv;
-      if (baseY < 0) {
-        xv = (hw*0.95 - (-baseY/hh) * (hw*0.15)) * Math.cos(angle);
-      } else {
-        xv = (hw*0.9 + (baseY/hh) * (hw*0.2)) * Math.cos(angle);
-      }
-      pts.push(new THREE.Vector3(xv, baseY, 0));
-    }
-    const curve = new THREE.CatmullRomCurve3(pts, true);
-    const tube = new THREE.TubeGeometry(curve, 48, 1.0, 6, true);
-    const rim = new THREE.Mesh(tube, frameMat);
-    rim.position.set(x, 0, 0);
-    g.add(rim);
-  });
-
-  [ -1, 1 ].forEach(s => {
-    const pivot = new THREE.Group();
-    const hx = s * (cx + lw*0.45);
-    const armPts = [
-      new THREE.Vector3(0, 0, 0),
-      new THREE.Vector3(0, 0, -30),
-      new THREE.Vector3(0, 0, -58)
-    ];
-    const aCurve = new THREE.CatmullRomCurve3(armPts);
-    const aGeo = new THREE.TubeGeometry(aCurve, 20, 1.2, 6, false);
-    pivot.add(new THREE.Mesh(aGeo, frameMat));
-    pivot.position.set(hx, 0, 0);
-    pivot.rotation.y = s * 0.1;
-    g.add(pivot);
-  });
-
-  g.traverse(c => { if (c.isMesh) c.renderOrder = 3; });
-  return g;
-}
-
-const glassesBuilders = {
-  round: buildRoundGlasses,
-  square: buildSquareGlasses,
-  aviator: buildAviatorGlasses,
-  cateye: buildCateyeGlasses,
-  sport: buildSportGlasses
-};
 
 const prescription = {
   cylinder: 0,
@@ -576,10 +280,7 @@ function rebuildGlasses() {
       }
     });
   }
-  const builder = glassesBuilders[currentStyle] || glassesBuilders.round;
-  glassesGroup = builder(
-    currentColor, currentLensColor, currentLensOpacity
-  );
+  glassesGroup = buildFromModel(currentStyle, currentColor, currentLensColor, currentLensOpacity);
   patchLenses(glassesGroup);
   updateLensUniforms();
   scene.add(glassesGroup);
@@ -590,10 +291,11 @@ function rebuildGlasses() {
 
 // ── Scene Setup ─────────────────────────────────────────────────────────
 
-function initScene(videoEl) {
+async function initScene(videoEl) {
   video = videoEl;
   const vw = video.videoWidth || 640;
   const vh = video.videoHeight || 480;
+  await loadAllModels();
 
   camera = new THREE.OrthographicCamera(-vw/2, vw/2, vh/2, -vh/2, 0.1, 5000);
   camera.position.set(-vw/2, -vh/2, 500);
@@ -769,15 +471,16 @@ function runPrediction() {
       const rotMat = new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis);
       const targetQuat = new THREE.Quaternion().setFromRotationMatrix(rotMat);
 
+      const sc = STYLE_CFG[currentStyle] || STYLE_CFG.round;
       const tPos = eMid.clone()
-        .addScaledVector(xAxis, CFG.glassesCenterX)
-        .addScaledVector(yAxis, CFG.glassesDown)
-        .addScaledVector(zAxis, 8);
+        .addScaledVector(xAxis, sc.centerX)
+        .addScaledVector(yAxis, sc.down)
+        .addScaledVector(zAxis, sc.depth);
 
       const wS = fW / CFG.refHeadWidth;
       const hS = fH / CFG.refFaceHeight;
       const bS = wS * 0.7 + hS * 0.3;
-      const tScaleVal = bS * CFG.glassesScale;
+      const tScaleVal = bS * CFG.glassesScale * sc.scale;
       const tScale = new THREE.Vector3(tScaleVal, tScaleVal, tScaleVal);
 
       const mov = tPos.distanceTo(smooth.prev);
@@ -899,7 +602,7 @@ async function startApp() {
   loadingText.textContent = 'Inicializando cena 3D...';
   await new Promise(r => setTimeout(r, 100));
 
-  initScene(webcam);
+  await initScene(webcam);
 
   loadingText.textContent = 'Carregando modelo de detecção facial...';
 
@@ -1122,7 +825,7 @@ async function initTestMode() {
   loadingText.textContent = 'Inicializando cena 3D...';
   await new Promise(r => setTimeout(r, 100));
 
-  initScene(webcam);
+  await initScene(webcam);
 
   const anim = () => {
     if (!testModeSketchpad) return;

@@ -1,6 +1,6 @@
 import * as THREE from 'three'
-import { glassesBuilders } from './glasses-builder.js'
-import { LM, FACE_OVAL, CFG } from './constants.js'
+import { loadAllGlassesModels, getGlassesModel, isModelReady } from './glasses-builder.js'
+import { LM, FACE_OVAL, CFG, STYLE_CONFIG } from './constants.js'
 
 const VISION_CDN = 'https://unpkg.com/@mediapipe/tasks-vision@0.10.7'
 const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task'
@@ -98,6 +98,7 @@ export class TryOnEngine {
     while (videoEl.videoWidth === 0 || videoEl.videoHeight === 0) {
       await new Promise(r => setTimeout(r, 50))
     }
+    await loadAllGlassesModels()
     const vw = videoEl.videoWidth
     const vh = videoEl.videoHeight
 
@@ -378,8 +379,12 @@ export class TryOnEngine {
         }
       })
     }
-    const builder = glassesBuilders[this._currentStyle] || glassesBuilders.round
-    this.glassesGroup = builder(this._currentColor, this._currentLensColor, this._currentLensOpacity)
+    const model = getGlassesModel(this._currentStyle, this._currentColor, this._currentLensColor, this._currentLensOpacity)
+    if (model) {
+      this.glassesGroup = model
+    } else {
+      this.glassesGroup = new THREE.Group()
+    }
     this.scene?.add(this.glassesGroup)
     if (this.occluderMesh) {
       this.scene?.remove(this.occluderMesh)
@@ -458,13 +463,14 @@ export class TryOnEngine {
           new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI)
         )
 
+        const sc = STYLE_CONFIG[this._currentStyle] || STYLE_CONFIG.round
         const depAdj = clamp(nTip.clone().sub(nose).length() * 0.1, 0, 6)
         const tPos = eMid.clone()
-          .addScaledVector(xAxis, CFG.glassesCenterX)
-          .addScaledVector(yAxis, CFG.glassesDown)
-          .addScaledVector(zAxis, CFG.glassesDepth + depAdj)
+          .addScaledVector(xAxis, sc.centerX)
+          .addScaledVector(yAxis, sc.down)
+          .addScaledVector(zAxis, sc.depth + depAdj)
 
-        const tScaleVal = ((fW / CFG.refHeadWidth) * 0.7 + (fH / CFG.refFaceHeight) * 0.3) * CFG.glassesScale
+        const tScaleVal = ((fW / CFG.refHeadWidth) * 0.7 + (fH / CFG.refFaceHeight) * 0.3) * CFG.glassesScale * sc.scale
         const tScale = new THREE.Vector3(tScaleVal, tScaleVal, tScaleVal)
 
         const mov = tPos.distanceTo(this.smooth.prev)
