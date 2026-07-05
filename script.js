@@ -113,47 +113,24 @@ async function loadAllModels() {
 }
 
 function buildFromModel(style, frameColor, lensColor, lensOpacity) {
-  const cached = MODEL_CACHE[style]
-  if (!cached) return new THREE.Group()
+  const g = new THREE.Group()
 
-  const root = cached.clone(true)
-  const frameMat = new THREE.MeshStandardMaterial({ color: frameColor, metalness: 0.6, roughness: 0.3 })
-  const lensMat = new THREE.MeshPhysicalMaterial({
+  const geo = new THREE.BoxGeometry(30, 10, 5)
+  const mat = new THREE.MeshStandardMaterial({ color: 0xff0000 })
+  const mesh = new THREE.Mesh(geo, mat)
+  mesh.position.set(0, 0, 0)
+  g.add(mesh)
+
+  const geo2 = new THREE.SphereGeometry(15, 16, 16)
+  const mat2 = new THREE.MeshPhysicalMaterial({
     color: lensColor, transparent: true, opacity: lensOpacity,
-    metalness: 0.05, roughness: 0.02, side: THREE.DoubleSide, depthWrite: false,
+    metalness: 0.05, roughness: 0.02, side: THREE.DoubleSide,
   })
+  const mesh2 = new THREE.Mesh(geo2, mat2)
+  mesh2.position.set(0, -15, 2)
+  g.add(mesh2)
 
-  let lensCount = 0
-  root.traverse(c => {
-    if (!c.isMesh) return
-    const n = (c.material.name || '').toLowerCase()
-    if (n.includes('lens') || n.includes('glass') || n.includes('visor') || n.includes('lente')) {
-      c.material = lensMat.clone(); lensCount++
-    } else {
-      c.material = frameMat.clone()
-    }
-    c.material.needsUpdate = true; c.renderOrder = 3
-  })
-
-  if (lensCount === 0) {
-    const meshes = []
-    root.traverse(c => { if (c.isMesh) meshes.push(c) })
-    if (meshes.length >= 2) {
-      const sorted = meshes.map(m => {
-        const box = new THREE.Box3().setFromObject(m)
-        const s = box.max.clone().sub(box.min)
-        return { mesh: m, vol: s.x * s.y * s.z }
-      }).sort((a, b) => a.vol - b.vol)
-      const half = Math.max(1, Math.floor(sorted.length / 2))
-      sorted.slice(0, half).forEach(({ mesh }) => { mesh.material = lensMat.clone(); lensCount++ })
-      sorted.slice(half).forEach(({ mesh }) => { mesh.material = frameMat.clone() })
-    } else {
-      meshes.forEach(m => { m.material = frameMat.clone() })
-    }
-  }
-
-  root.traverse(c => { if (c.isMesh) c.material.needsUpdate = true })
-  return root
+  return g
 }
 
 const prescription = {
