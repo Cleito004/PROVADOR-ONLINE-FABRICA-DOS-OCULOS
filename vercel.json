@@ -16,11 +16,6 @@
     {
       "src": "core/**/*",
       "use": "@vercel/static"
-    },
-    {
-      "src": "core/assets/models/*.glb",
-      "use": "@vercel/static",
-      "headers": { "Content-Type": "model/gltf-binary" }
     }
   ],
   "rewrites": [
