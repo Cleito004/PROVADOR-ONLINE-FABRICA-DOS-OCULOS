@@ -29,11 +29,11 @@ export const CFG = {
 }
 
 export const STYLE_CONFIG = {
-  round:   { scale: 1.0, depth: 8,  down: 2, centerX: 0 },
-  square:  { scale: 1.0, depth: 8,  down: 2, centerX: 0 },
-  aviator: { scale: 1.0, depth: 8,  down: 2, centerX: 0 },
-  cateye:  { scale: 1.0, depth: 8,  down: 2, centerX: 0 },
-  sport:   { scale: 1.0, depth: 10, down: 3, centerX: 0 },
+  round:   { scale: 300, depth: 8,  down: 2, centerX: 0 },
+  square:  { scale: 300, depth: 8,  down: 2, centerX: 0 },
+  aviator: { scale: 300, depth: 8,  down: 2, centerX: 0 },
+  cateye:  { scale: 300, depth: 8,  down: 2, centerX: 0 },
+  sport:   { scale: 300, depth: 10, down: 3, centerX: 0 },
 }
 
 export const GLASSES_STYLES = [
