@@ -14,11 +14,17 @@
       "use": "@vercel/static"
     },
     {
+      "src": "*.{glb,hdr,png,jpg,json,svg}",
+      "use": "@vercel/static"
+    },
+    {
       "src": "core/**/*",
       "use": "@vercel/static"
     }
   ],
   "rewrites": [
+    { "source": "/(.*\\.(?:js|css|glb|hdr|png|jpg|json|svg|wasm))", "destination": "/$1" },
+    { "source": "/core/(.*)", "destination": "/core/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

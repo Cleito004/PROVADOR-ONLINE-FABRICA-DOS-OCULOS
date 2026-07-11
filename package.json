@@ -12,5 +12,27 @@
     "backend:start": "cd backend && npm start",
     "dev:all": "concurrently \"npm run backend:dev\" \"npm run next:dev\"",
     "install:all": "cd next-app && npm install && cd ../vue-app && npm install && cd ../backend && npm install"
+  },
+  "main": "script.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Cleito004/PROVADOR-ONLINE-FABRICA-DOS-OCULOS.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Cleito004/PROVADOR-ONLINE-FABRICA-DOS-OCULOS/issues"
+  },
+  "homepage": "https://github.com/Cleito004/PROVADOR-ONLINE-FABRICA-DOS-OCULOS#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "playwright": "^1.61.1"
+  },
+  "dependencies": {
+    "three": "^0.160.0"
+  },
+  "directories": {
+    "test": "tests"
   }
 }

@@ -11,6 +11,10 @@ export const LM = {
   chin: 175,
   noseBridge: 168,
   noseTip: 1,
+  noseBottom: 2,
+  midEye: 168,
+  leftEyePupil: 143,
+  rightEyePupil: 372,
 }
 
 export const FACE_OVAL = [
@@ -22,18 +26,18 @@ export const FACE_OVAL = [
 export const CFG = {
   refHeadWidth: 140,
   refFaceHeight: 210,
-  glassesDepth: 8,
+  glassesDepth: 0,
   glassesDown: 2,
   glassesCenterX: 0,
-  glassesScale: 1.2,
+  glassesScale: 3.5,
 }
 
 export const STYLE_CONFIG = {
-  round:   { scale: 300, depth: 8,  down: 2, centerX: 0 },
-  square:  { scale: 300, depth: 8,  down: 2, centerX: 0 },
-  aviator: { scale: 300, depth: 8,  down: 2, centerX: 0 },
-  cateye:  { scale: 300, depth: 8,  down: 2, centerX: 0 },
-  sport:   { scale: 300, depth: 10, down: 3, centerX: 0 },
+  round:   { scale: 300, depth: 3,  down: 2,  centerX: 0, upOffset: 0,  scaleFactor: 0.01, flipY: true  },
+  square:  { scale: 300, depth: 3,  down: 2,  centerX: 0, upOffset: 0,  scaleFactor: 0.01, flipY: true  },
+  aviator: { scale: 300, depth: 3,  down: 2,  centerX: 0, upOffset: 0.5,scaleFactor: 0.01, flipY: true  },
+  cateye:  { scale: 300, depth: 3,  down: 2,  centerX: 0, upOffset: 0,  scaleFactor: 0.01, flipY: true  },
+  sport:   { scale: 300, depth: 3,  down: 3,  centerX: 0, upOffset: 0,  scaleFactor: 0.01, flipY: true  },
 }
 
 export const GLASSES_STYLES = [
@@ -54,7 +58,7 @@ export const FRAME_COLORS = [
 ]
 
 export const LENS_OPTIONS = [
-  { color: '#1a2e1a', opacity: 0.7, label: 'Verde G-15' },
+  { color: '#222222', opacity: 0.7, label: 'Preto' },
   { color: '#2a1a2e', opacity: 0.6, label: 'Gradiente' },
   { color: '#1a1a2e', opacity: 0.5, label: 'Azul' },
   { color: '#8B4513', opacity: 0.4, label: 'Marrom' },

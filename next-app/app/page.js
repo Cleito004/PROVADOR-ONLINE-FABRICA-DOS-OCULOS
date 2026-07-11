@@ -8,7 +8,7 @@ import styles from '../styles/page.module.css'
 export default function HomePage() {
   const [style, setStyle] = useState('round')
   const [frameColor, setFrameColor] = useState('#1a1a1a')
-  const [lensColor, setLensColor] = useState('#1a2e1a')
+  const [lensColor, setLensColor] = useState('#222222')
   const [lensOpacity, setLensOpacity] = useState(0.7)
   const [isActive, setIsActive] = useState(false)
   const [cameraReady, setCameraReady] = useState(false)

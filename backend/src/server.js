@@ -5,6 +5,7 @@ import jpeg from 'jpeg-js'
 import 'dotenv/config'
 import { initFaceProcessor, detectFace, calcGlassesPose } from './face-processor.js'
 import { initSupabase, saveSession, saveScreenshot, getRealtimeChannel } from './supabase.js'
+import { initMoondream, analyzeFace, analyzeGlassesFit, autoFit, prescriptionOCR } from './moondream-service.js'
 
 const PORT = process.env.WS_PORT || 8080
 
@@ -115,19 +116,69 @@ async function handleMessage(clientId, ws, raw) {
     }
 
     case 'screenshot': {
-      const { userId, sessionId, imageUrl } = msg
+      const { userId, sessionId, imageUrl, glassesStyle } = msg
       if (userId && imageUrl) {
         await saveScreenshot(userId, sessionId, imageUrl).catch(() => {})
       }
       broadcast({ type: 'screenshot-saved', userId, sessionId, clientId }, clientId)
+      const buf = Buffer.from(imageUrl.split(',')[1] || imageUrl, 'base64')
+      analyzeFace(buf).then(facial => {
+        if (facial) {
+          ws.send(JSON.stringify({ type: 'face-analysis', clientId, ...facial }))
+        }
+      })
+      analyzeGlassesFit(buf, glassesStyle).then(fit => {
+        if (fit) {
+          ws.send(JSON.stringify({ type: 'glasses-fit-analysis', clientId, ...fit }))
+        }
+      })
       break
     }
 
-    case 'sync-request': {
-      ws.send(JSON.stringify({
-        type: 'peer-list',
-        peers: Array.from(clients.keys()).filter(id => id !== clientId),
-      }))
+    case 'analyze-face': {
+      const { imageData, glassesStyle } = msg
+      if (!imageData) {
+        ws.send(JSON.stringify({ type: 'error', message: 'analyze-face: imageData obrigatório' }))
+        return
+      }
+      const buf = Buffer.from(imageData, 'base64')
+      analyzeFace(buf).then(facial => {
+        if (facial) ws.send(JSON.stringify({ type: 'face-analysis', clientId, ...facial }))
+        else ws.send(JSON.stringify({ type: 'face-analysis', clientId, error: 'Falha ao analisar' }))
+      })
+      if (glassesStyle) {
+        analyzeGlassesFit(buf, glassesStyle).then(fit => {
+          if (fit) ws.send(JSON.stringify({ type: 'glasses-fit-analysis', clientId, ...fit }))
+        })
+      }
+      break
+    }
+
+    case 'auto-fit': {
+      const { imageData } = msg
+      if (!imageData) {
+        ws.send(JSON.stringify({ type: 'error', message: 'auto-fit: imageData obrigatório' }))
+        return
+      }
+      const buf2 = Buffer.from(imageData, 'base64')
+      autoFit(buf2).then(result => {
+        if (result) ws.send(JSON.stringify({ type: 'auto-fit-result', clientId, ...result }))
+        else ws.send(JSON.stringify({ type: 'auto-fit-result', clientId, error: 'Falha ao analisar' }))
+      })
+      break
+    }
+
+    case 'prescription-ocr': {
+      const { imageData } = msg
+      if (!imageData) {
+        ws.send(JSON.stringify({ type: 'error', message: 'prescription-ocr: imageData obrigatório' }))
+        return
+      }
+      const buf3 = Buffer.from(imageData, 'base64')
+      prescriptionOCR(buf3).then(result => {
+        if (result) ws.send(JSON.stringify({ type: 'prescription-ocr-result', clientId, ...result }))
+        else ws.send(JSON.stringify({ type: 'prescription-ocr-result', clientId, error: 'Falha ao ler receita' }))
+      })
       break
     }
 
@@ -139,6 +190,7 @@ async function handleMessage(clientId, ws, raw) {
 async function main() {
   console.log('[Server] Inicializando...')
   initSupabase()
+  initMoondream()
 
   console.log('[Server] Carregando modelo MediaPipe...')
   try {

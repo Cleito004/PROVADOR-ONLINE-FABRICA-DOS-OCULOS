@@ -125,12 +125,16 @@ main {
   position: absolute;
   inset: 0;
   z-index: 2;
+  perspective: 1200px;
+  perspective-origin: center center;
 }
 
 #threejs-container canvas {
   width: 100% !important;
   height: 100% !important;
   display: block;
+  transform: scaleX(-1);
+  filter: drop-shadow(0 0 2px rgba(0,0,0,0.1));
 }
 
 #webcam {
@@ -242,6 +246,99 @@ main {
   background: var(--primary);
   cursor: pointer;
   border: none;
+}
+
+/* Scan overlay */
+#scan-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15,15,26,0.85);
+  z-index: 9;
+  transition: opacity 0.5s;
+}
+#scan-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+.scan-box {
+  text-align: center;
+  max-width: 340px;
+  padding: 32px;
+  position: relative;
+}
+.scan-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 200px;
+  height: 200px;
+  transform: translate(-50%, -50%);
+  border: 2px solid var(--primary);
+  border-radius: 50%;
+  animation: scan-pulse 1.5s ease-in-out infinite;
+  opacity: 0.3;
+}
+.scan-ring::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border: 2px solid var(--primary);
+  border-radius: 50%;
+  animation: scan-pulse 1.5s ease-in-out infinite 0.3s;
+  opacity: 0.15;
+}
+.scan-ring::after {
+  content: '';
+  position: absolute;
+  inset: -16px;
+  border: 2px solid var(--primary);
+  border-radius: 50%;
+  animation: scan-pulse 1.5s ease-in-out infinite 0.6s;
+  opacity: 0.08;
+}
+@keyframes scan-pulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); }
+  50% { transform: translate(-50%, -50%) scale(1.08); }
+}
+.scan-icon {
+  font-size: 48px;
+  display: block;
+  margin-bottom: 12px;
+  position: relative;
+  z-index: 1;
+}
+.scan-content h2 {
+  font-size: 20px;
+  margin-bottom: 8px;
+}
+.scan-content p {
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+.scan-progress {
+  width: 200px;
+  height: 4px;
+  background: var(--surface2);
+  border-radius: 2px;
+  margin: 0 auto 8px;
+  overflow: hidden;
+}
+.scan-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--primary), #a78bfa);
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+.scan-status {
+  font-size: 11px !important;
+  color: var(--text-dim) !important;
+  margin-bottom: 0 !important;
 }
 
 /* Start prompt */
@@ -418,6 +515,133 @@ main {
   gap: 8px;
   flex-direction: column;
 }
+
+/* Moondream AI panel */
+#moondream-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.md-status {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  text-align: center;
+}
+.md-status.online { background: rgba(76,175,80,0.15); color: #81C784; }
+.md-status.offline { background: rgba(255,152,0,0.15); color: #FFB74D; }
+.md-status.loading { background: rgba(33,150,243,0.15); color: #64B5F6; }
+
+.md-results {
+  background: var(--surface2);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+.md-results.hidden { display: none; }
+.md-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 0;
+  color: var(--text-dim);
+}
+.md-row strong, .md-row span:last-child { color: var(--text); }
+.md-recs-list {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.md-recs-list .rec-tag {
+  background: rgba(108,99,255,0.2);
+  color: var(--primary);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.md-recs-list .rec-tag:hover {
+  background: var(--primary);
+  color: #fff;
+}
+.md-actions {
+  display: flex;
+  gap: 6px;
+}
+.md-actions .btn { flex: 1; }
+.btn-sm {
+  font-size: 12px;
+  padding: 7px 12px;
+}
+.btn-sm span { font-size: 14px; }
+.md-upload {
+  display: flex;
+}
+.md-upload .btn {
+  flex: 1;
+  justify-content: center;
+  font-size: 12px;
+  padding: 7px 12px;
+}
+.md-upload .btn[aria-disabled="true"] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* OpenCV panel */
+#opencv-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.opencv-status {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  text-align: center;
+}
+.opencv-status.online { background: rgba(76,175,80,0.15); color: #81C784; }
+.opencv-status.offline { background: rgba(255,152,0,0.15); color: #FFB74D; }
+.opencv-status.loading { background: rgba(33,150,243,0.15); color: #64B5F6; }
+.opencv-status.error { background: rgba(244,67,54,0.15); color: #EF5350; }
+
+.opencv-results {
+  background: var(--surface2);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+.opencv-results.hidden { display: none; }
+.opencv-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 0;
+  color: var(--text-dim);
+}
+.opencv-row strong { color: var(--text); }
+.opencv-recommendations {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ocv-rec {
+  font-size: 11px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  line-height: 1.3;
+}
+.ocv-rec.success { background: rgba(76,175,80,0.1); color: #A5D6A7; }
+.ocv-rec.warning { background: rgba(255,152,0,0.1); color: #FFCC80; }
+.ocv-rec.error { background: rgba(244,67,54,0.1); color: #EF9A9A; }
+.ocv-rec.info { background: rgba(33,150,243,0.1); color: #90CAF9; }
+.opencv-actions {
+  display: flex;
+  gap: 6px;
+}
+.opencv-actions .btn { flex: 1; }
 
 .actions .btn {
   width: 100%;

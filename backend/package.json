@@ -12,6 +12,7 @@
     "@supabase/supabase-js": "^2.39.0",
     "dotenv": "^16.3.0",
     "jpeg-js": "^0.4.4",
+    "moondream": "^0.2.0",
     "uuid": "^9.0.0",
     "ws": "^8.16.0"
   }

@@ -3,10 +3,15 @@ node_modules/
 next-app/node_modules/
 vue-app/node_modules/
 backend/node_modules/
+package-lock.json
+next-app/package-lock.json
+vue-app/package-lock.json
+backend/package-lock.json
 
 # Environment
 .env
 .env.local
+.env*
 backend/.env
 
 # Build / output
@@ -37,6 +42,18 @@ mediapipe-models/
 
 # Playwright MCP (auto-generated logs, screenshots)
 .playwright-mcp/
+test-results/
+
+# Screenshots / temp images
+*.png
+*.jpg
+*.jpeg
+!opencv-backend/models/*.caffemodel
+
+# Logs
+*.log
+console-warnings.log
+page-state.md
 
 # Large zip / archive files
 *.zip
@@ -48,3 +65,11 @@ Git/
 
 # Vercel
 .vercel
+
+# OpenCV backend Python cache
+opencv-backend/__pycache__/
+
+# Misc
+openrouter.ts
+server.cjs
+uploads_files_*

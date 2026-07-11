@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>Provador Virtual - Fábrica dos Óculos</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -29,6 +30,21 @@
         <h2 id="error-title">Algo deu errado</h2>
         <p id="error-message">Nao foi possivel carregar o modelo de deteccao facial.</p>
         <button id="retry-btn" class="btn btn-primary">Tente Novamente</button>
+      </div>
+    </div>
+
+    <div id="scan-overlay" class="hidden">
+      <div class="scan-box">
+        <div class="scan-ring"></div>
+        <div class="scan-content">
+          <span class="scan-icon">&#x1F9D0;</span>
+          <h2 id="scan-title">Escaneando Rosto</h2>
+          <p id="scan-message">Fique parado por um instante enquanto escaneamos seu rosto...</p>
+          <div class="scan-progress">
+            <div id="scan-progress-bar" class="scan-progress-bar"></div>
+          </div>
+          <p id="scan-status" class="scan-status">Detectando...</p>
+        </div>
       </div>
     </div>
 
@@ -89,7 +105,7 @@
         <div class="control-section">
           <h3>Cor da Lente</h3>
           <div class="color-list" id="lens-color-list">
-            <button class="color-option active" data-color="#1a2e1a" data-opacity="0.7" style="background:#1a2e1a" title="Verde G-15"></button>
+            <button class="color-option active" data-color="#222222" data-opacity="0.7" style="background:#222222" title="Preto"></button>
             <button class="color-option" data-color="#2a1a2e" data-opacity="0.6" style="background:#2a1a2e" title="Gradiente"></button>
             <button class="color-option" data-color="#1a1a2e" data-opacity="0.5" style="background:#1a1a2e" title="Azul"></button>
             <button class="color-option" data-color="#8B4513" data-opacity="0.4" style="background:#8B4513" title="Marrom"></button>
@@ -98,38 +114,57 @@
           </div>
         </div>
 
+
+
         <div class="control-section">
-          <h3>Simulação de Lentes</h3>
-          <div class="lens-effects">
-            <label class="toggle-row">
-              <span>Astigmatismo</span>
-              <input type="checkbox" id="astigmatism-toggle">
-              <span class="toggle-slider"></span>
-            </label>
-            <div class="slider-row" id="cylinder-row">
-              <label>Cilindro: <span id="cylinder-val">0.00</span></label>
-              <input type="range" id="cylinder-slider" min="0" max="4" step="0.25" value="0">
+          <h3>IA Moondream</h3>
+          <div id="moondream-panel">
+            <div id="moondream-status" class="md-status offline">IA offline</div>
+            <div id="moondream-results" class="md-results hidden">
+              <div class="md-row"><span>Formato:</span> <strong id="md-face-shape">-</strong></div>
+              <div class="md-row"><span>Recomendado:</span> <span id="md-recommendations">-</span></div>
             </div>
-            <div class="slider-row" id="axis-row">
-              <label>Eixo: <span id="axis-val">0°</span></label>
-              <input type="range" id="axis-slider" min="0" max="180" step="1" value="0">
+            <div class="md-actions">
+              <button id="md-analyze-btn" class="btn btn-secondary btn-sm" disabled>
+                <span>&#x1F9D0;</span> Analisar Rosto
+              </button>
+              <button id="md-autofit-btn" class="btn btn-secondary btn-sm" disabled>
+                <span>&#x2728;</span> Auto Ajuste
+              </button>
             </div>
-            <label class="toggle-row">
-              <span>Filtro Azul</span>
-              <input type="checkbox" id="blue-filter-toggle">
-              <span class="toggle-slider"></span>
-            </label>
-            <div class="slider-row" id="photochromic-row">
-              <label>Fotocromático: <span id="photochromic-val">0%</span></label>
-              <input type="range" id="photochromic-slider" min="0" max="100" step="5" value="0">
+            <div class="md-upload">
+              <label id="md-prescription-label" class="btn btn-outline btn-sm" aria-disabled="true">
+                <span>&#x1F4CB;</span> Ler Receita
+                <input type="file" id="md-prescription-input" accept="image/*" hidden>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="control-section">
+          <h3>Análise OpenCV</h3>
+          <div id="opencv-panel">
+            <div id="opencv-status" class="opencv-status offline">Backend offline</div>
+            <div id="opencv-results" class="opencv-results hidden">
+              <div class="opencv-row"><span>Detector:</span> <strong id="ocv-detector">-</strong></div>
+              <div class="opencv-row"><span>Rostos:</span> <strong id="ocv-faces">-</strong></div>
+              <div class="opencv-row"><span>Formato:</span> <strong id="ocv-shape">-</strong></div>
+              <div class="opencv-row"><span>Iluminação:</span> <strong id="ocv-lighting">-</strong></div>
+              <div class="opencv-row"><span>Melhor estilo:</span> <strong id="ocv-best-style">-</strong></div>
+              <div id="ocv-recommendations" class="opencv-recommendations"></div>
+            </div>
+            <div class="opencv-actions">
+              <button id="opencv-analyze-btn" class="btn btn-secondary btn-sm" disabled>
+                <span>&#x1F50D;</span> Analisar com OpenCV
+              </button>
+              <button id="opencv-auto-btn" class="btn btn-secondary btn-sm" disabled>
+                <span>&#x2728;</span> Auto Ajuste OpenCV
+              </button>
             </div>
           </div>
         </div>
 
         <div class="control-section actions">
-          <button id="test-mode-btn" class="btn btn-outline">
-            <span>&#x1F916;</span> Boneco Teste
-          </button>
           <button id="screenshot-btn" class="btn btn-secondary">
             <span>&#x1F4F8;</span> Capturar Foto
           </button>
