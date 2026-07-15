@@ -38,6 +38,10 @@ const CFG = {
   glassesDown: 2,
   glassesCenterX: 0,
   glassesScale: 3.5,
+  glassesDepthOffset: 0,
+  glassesHeightOffset: 0,
+  glassesRotationOffset: 0,
+  glassesLateralOffset: 0,
 }
 
 const STYLE_CONFIG = {
@@ -824,7 +828,15 @@ function runPrediction() {
       if (fi) { fi.textContent = `Formato: ${faceShape} | DP: ${pdMm}mm`; fi.classList.remove('hidden'); }
 
       glassesGroup.position.copy(smooth.pos);
+      glassesGroup.position.y += CFG.glassesHeightOffset;
+      glassesGroup.position.x += CFG.glassesLateralOffset;
       glassesGroup.quaternion.copy(smooth.quat);
+      if (CFG.glassesRotationOffset !== 0) {
+        const rotOffset = new THREE.Quaternion().setFromAxisAngle(
+          new THREE.Vector3(0, 0, 1), CFG.glassesRotationOffset * Math.PI / 180
+        );
+        glassesGroup.quaternion.multiply(rotOffset);
+      }
       glassesGroup.scale.copy(smooth.scale);
       if (!glassesGroup.visible) glassesGroup.visible = true;
       glassesGroup.updateWorldMatrix(true, true);
@@ -1413,3 +1425,44 @@ ocvUI.autoBtn.addEventListener('click', autoFitOpenCV)
 connectOpenCV()
 
 // ── Test Mode removed ───────────────────────────────────────────────────
+
+// ── Sliders de ajuste manual ───────────────────────────────────────────
+const depthSlider = document.getElementById('depth-slider');
+if (depthSlider) {
+  const savedDepth = localStorage.getItem('glassesDepthOffset');
+  if (savedDepth !== null) { CFG.glassesDepthOffset = parseFloat(savedDepth); depthSlider.value = savedDepth; }
+  depthSlider.addEventListener('input', () => {
+    CFG.glassesDepthOffset = parseFloat(depthSlider.value);
+    localStorage.setItem('glassesDepthOffset', depthSlider.value);
+  });
+}
+
+const heightSlider = document.getElementById('height-slider');
+if (heightSlider) {
+  const savedHeight = localStorage.getItem('glassesHeightOffset');
+  if (savedHeight !== null) { CFG.glassesHeightOffset = parseFloat(savedHeight); heightSlider.value = savedHeight; }
+  heightSlider.addEventListener('input', () => {
+    CFG.glassesHeightOffset = parseFloat(heightSlider.value);
+    localStorage.setItem('glassesHeightOffset', heightSlider.value);
+  });
+}
+
+const rotationSlider = document.getElementById('rotation-slider');
+if (rotationSlider) {
+  const savedRotation = localStorage.getItem('glassesRotationOffset');
+  if (savedRotation !== null) { CFG.glassesRotationOffset = parseFloat(savedRotation); rotationSlider.value = savedRotation; }
+  rotationSlider.addEventListener('input', () => {
+    CFG.glassesRotationOffset = parseFloat(rotationSlider.value);
+    localStorage.setItem('glassesRotationOffset', rotationSlider.value);
+  });
+}
+
+const lateralSlider = document.getElementById('lateral-slider');
+if (lateralSlider) {
+  const savedLateral = localStorage.getItem('glassesLateralOffset');
+  if (savedLateral !== null) { CFG.glassesLateralOffset = parseFloat(savedLateral); lateralSlider.value = savedLateral; }
+  lateralSlider.addEventListener('input', () => {
+    CFG.glassesLateralOffset = parseFloat(lateralSlider.value);
+    localStorage.setItem('glassesLateralOffset', lateralSlider.value);
+  });
+}

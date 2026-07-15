@@ -744,3 +744,116 @@ footer {
     display: none;
   }
 }
+
+/* Depth control */
+#depth-control {
+  position: fixed;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(8px);
+  border-radius: 12px;
+  padding: 8px 16px;
+}
+
+#depth-control label {
+  color: rgba(255,255,255,0.7);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+#depth-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 140px;
+  height: 4px;
+  background: var(--surface2, #444);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+#depth-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: var(--primary, #7c5cfc);
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid #fff;
+}
+
+#depth-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: var(--primary, #7c5cfc);
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid #fff;
+}
+
+/* Adjust controls (altura, rotacao, lateral) */
+#adjust-controls {
+  position: fixed;
+  bottom: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  gap: 12px;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(8px);
+  border-radius: 12px;
+  padding: 8px 16px;
+}
+
+.adjust-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.adjust-row label {
+  color: rgba(255,255,255,0.7);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.adjust-row input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 90px;
+  height: 4px;
+  background: var(--surface2, #444);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.adjust-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  background: var(--primary, #7c5cfc);
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid #fff;
+}
+
+.adjust-row input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: var(--primary, #7c5cfc);
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid #fff;
+}
