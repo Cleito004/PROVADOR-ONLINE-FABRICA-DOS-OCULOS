@@ -14,17 +14,22 @@
       "use": "@vercel/static"
     },
     {
-      "src": "*.{glb,hdr,png,jpg,json,svg}",
+      "src": "*.{glb,hdr,png,jpg,json,svg,wasm}",
       "use": "@vercel/static"
     },
     {
       "src": "core/**/*",
       "use": "@vercel/static"
+    },
+    {
+      "src": "libs/**/*",
+      "use": "@vercel/static"
     }
   ],
   "rewrites": [
-    { "source": "/(.*\\.(?:js|css|glb|hdr|png|jpg|json|svg|wasm))", "destination": "/$1" },
+    { "source": "/libs/(.*)", "destination": "/libs/$1" },
     { "source": "/core/(.*)", "destination": "/core/$1" },
+    { "source": "/(.*\\.(?:js|css|glb|hdr|png|jpg,json,svg,wasm))", "destination": "/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

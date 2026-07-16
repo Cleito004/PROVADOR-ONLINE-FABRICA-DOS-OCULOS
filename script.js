@@ -996,7 +996,7 @@ async function initOpenCV() {
       const check = setInterval(() => {
         attempts++;
         if (typeof cv !== 'undefined' && cv.Mat) { clearInterval(check); resolve(true); }
-        else if (attempts > 100) { clearInterval(check); resolve(false); }
+        else if (attempts > 50) { clearInterval(check); resolve(false); }
       }, 200);
     });
 
@@ -1006,10 +1006,10 @@ async function initOpenCV() {
       opencvReady = true;
       console.log('OpenCV browser integration ready');
     } else {
-      console.warn('OpenCV.js not available, running without browser OpenCV');
+      console.warn('OpenCV.js not loaded, running without browser OpenCV');
     }
   } catch (e) {
-    console.warn('OpenCV init failed:', e);
+    console.warn('OpenCV init failed:', e.message || e);
   }
 }
 
@@ -1021,8 +1021,10 @@ const BACKEND_WS_URL = 'ws://localhost:5050/ws';
 let backendWs = null;
 let backendConnected = false;
 let backendReconnectTimer = null;
+let backendAvailable = true;
 
 function connectBackend() {
+  if (!backendAvailable) return;
   if (backendWs && backendWs.readyState <= 1) return;
 
   try {
@@ -1046,10 +1048,12 @@ function connectBackend() {
     };
 
     backendWs.onerror = () => {
+      backendAvailable = false;
       if (backendWs) backendWs.close();
+      console.log('Python backend not available, running without server-side OpenCV');
     };
   } catch {
-    backendReconnectTimer = setTimeout(connectBackend, 5000);
+    backendAvailable = false;
   }
 }
 
