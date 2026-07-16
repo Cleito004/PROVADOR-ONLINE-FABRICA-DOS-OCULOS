@@ -9,14 +9,6 @@
 </head>
 <body>
   <div id="app">
-    <header>
-      <div class="logo">
-        <span class="logo-icon">&#x1F453;</span>
-        <h1>Provador Virtual</h1>
-      </div>
-      <p class="subtitle">Experimente óculos online com realidade aumentada</p>
-    </header>
-
     <div id="loading-overlay" class="hidden">
       <div class="loader">
         <div class="spinner"></div>
@@ -28,7 +20,7 @@
       <div class="error-box">
         <span class="error-icon">&#x26A0;&#xFE0F;</span>
         <h2 id="error-title">Algo deu errado</h2>
-        <p id="error-message">Nao foi possivel carregar o modelo de deteccao facial.</p>
+        <p id="error-message">Não foi possível carregar o modelo de detecção facial.</p>
         <button id="retry-btn" class="btn btn-primary">Tente Novamente</button>
       </div>
     </div>
@@ -53,6 +45,7 @@
         <div id="threejs-container"></div>
         <video id="webcam" autoplay playsinline muted></video>
         <div id="face-info"></div>
+
         <div id="start-prompt">
           <div class="prompt-content">
             <span class="prompt-icon">&#x1F4F7;</span>
@@ -61,123 +54,54 @@
             <button id="start-btn" class="btn btn-primary">Ativar Câmera</button>
           </div>
         </div>
-      </div>
 
-      <div id="controls">
-        <div class="control-section">
-          <h3>Modelo</h3>
-          <div class="glasses-list" id="glasses-list">
-            <button class="glasses-option active" data-style="round">
-              <span class="glasses-icon">&#x1F453;</span>
-              <span>Redondo</span>
-            </button>
-            <button class="glasses-option" data-style="square">
-              <span class="glasses-icon">&#x1F453;</span>
-              <span>Quadrado</span>
-            </button>
-            <button class="glasses-option" data-style="aviator">
-              <span class="glasses-icon">&#x1F453;</span>
-              <span>Aviador</span>
-            </button>
-            <button class="glasses-option" data-style="cateye">
-              <span class="glasses-icon">&#x1F453;</span>
-              <span>Gatinho</span>
-            </button>
-            <button class="glasses-option" data-style="sport">
-              <span class="glasses-icon">&#x1F453;</span>
-              <span>Esportivo</span>
-            </button>
+        <!-- Matriz 3x1 de estilos - centro direito -->
+        <div id="style-matrix">
+          <div class="style-item active" data-style="square">
+            <span class="style-icon">&#x1F453;</span>
+            <span class="style-name">Quadrado</span>
+          </div>
+          <div class="style-item" data-style="aviator">
+            <span class="style-icon">&#x1F453;</span>
+            <span class="style-name">Aviador</span>
+          </div>
+          <div class="style-item" data-style="cateye">
+            <span class="style-icon">&#x1F453;</span>
+            <span class="style-name">Gatinho</span>
           </div>
         </div>
 
-        <div class="control-section">
-          <h3>Cor da Armação</h3>
-          <div class="color-list" id="color-list">
-            <button class="color-option active" data-color="#1a1a1a" style="background:#1a1a1a" title="Preto"></button>
-            <button class="color-option" data-color="#8B4513" style="background:#8B4513" title="Marrom"></button>
-            <button class="color-option" data-color="#C0A060" style="background:#C0A060" title="Dourado"></button>
-            <button class="color-option" data-color="#C0C0C0" style="background:#C0C0C0" title="Prata"></button>
-            <button class="color-option" data-color="#DC143C" style="background:#DC143C" title="Vermelho"></button>
-            <button class="color-option" data-color="#4169E1" style="background:#4169E1" title="Azul"></button>
+        <!-- Faixa de cores RGB - base inferior -->
+        <div id="color-strip-container">
+          <div id="color-strip">
+            <div id="color-needle"></div>
           </div>
         </div>
 
-        <div class="control-section">
-          <h3>Cor da Lente</h3>
-          <div class="color-list" id="lens-color-list">
-            <button class="color-option active" data-color="#222222" data-opacity="0.7" style="background:#222222" title="Preto"></button>
-            <button class="color-option" data-color="#2a1a2e" data-opacity="0.6" style="background:#2a1a2e" title="Gradiente"></button>
-            <button class="color-option" data-color="#1a1a2e" data-opacity="0.5" style="background:#1a1a2e" title="Azul"></button>
-            <button class="color-option" data-color="#8B4513" data-opacity="0.4" style="background:#8B4513" title="Marrom"></button>
-            <button class="color-option" data-color="#ffcc00" data-opacity="0.3" style="background:#ffcc00" title="Amarelo"></button>
-            <button class="color-option" data-color="#ffffff" data-opacity="0.05" style="background:#ffffff; border:1px solid #ccc" title="Transparente"></button>
+        <!-- Sliders de ajuste manual -->
+        <div id="adjustment-panel">
+          <div class="adj-row">
+            <label>Altura</label>
+            <input type="range" id="adj-height" min="-10" max="10" value="0" step="0.5">
+          </div>
+          <div class="adj-row">
+            <label>Rotação</label>
+            <input type="range" id="adj-rotation" min="-15" max="15" value="0" step="0.5">
+          </div>
+          <div class="adj-row">
+            <label>Lateral</label>
+            <input type="range" id="adj-lateral" min="-10" max="10" value="0" step="0.5">
+          </div>
+          <div class="adj-row">
+            <label>Distância</label>
+            <input type="range" id="adj-distance" min="-5" max="5" value="0" step="0.5">
           </div>
         </div>
 
-
-
-        <div class="control-section">
-          <h3>IA Moondream</h3>
-          <div id="moondream-panel">
-            <div id="moondream-status" class="md-status offline">IA offline</div>
-            <div id="moondream-results" class="md-results hidden">
-              <div class="md-row"><span>Formato:</span> <strong id="md-face-shape">-</strong></div>
-              <div class="md-row"><span>Recomendado:</span> <span id="md-recommendations">-</span></div>
-            </div>
-            <div class="md-actions">
-              <button id="md-analyze-btn" class="btn btn-secondary btn-sm" disabled>
-                <span>&#x1F9D0;</span> Analisar Rosto
-              </button>
-              <button id="md-autofit-btn" class="btn btn-secondary btn-sm" disabled>
-                <span>&#x2728;</span> Auto Ajuste
-              </button>
-            </div>
-            <div class="md-upload">
-              <label id="md-prescription-label" class="btn btn-outline btn-sm" aria-disabled="true">
-                <span>&#x1F4CB;</span> Ler Receita
-                <input type="file" id="md-prescription-input" accept="image/*" hidden>
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <div class="control-section">
-          <h3>Análise OpenCV</h3>
-          <div id="opencv-panel">
-            <div id="opencv-status" class="opencv-status offline">Backend offline</div>
-            <div id="opencv-results" class="opencv-results hidden">
-              <div class="opencv-row"><span>Detector:</span> <strong id="ocv-detector">-</strong></div>
-              <div class="opencv-row"><span>Rostos:</span> <strong id="ocv-faces">-</strong></div>
-              <div class="opencv-row"><span>Formato:</span> <strong id="ocv-shape">-</strong></div>
-              <div class="opencv-row"><span>Iluminação:</span> <strong id="ocv-lighting">-</strong></div>
-              <div class="opencv-row"><span>Melhor estilo:</span> <strong id="ocv-best-style">-</strong></div>
-              <div id="ocv-recommendations" class="opencv-recommendations"></div>
-            </div>
-            <div class="opencv-actions">
-              <button id="opencv-analyze-btn" class="btn btn-secondary btn-sm" disabled>
-                <span>&#x1F50D;</span> Analisar com OpenCV
-              </button>
-              <button id="opencv-auto-btn" class="btn btn-secondary btn-sm" disabled>
-                <span>&#x2728;</span> Auto Ajuste OpenCV
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div class="control-section actions">
-          <button id="screenshot-btn" class="btn btn-secondary">
-            <span>&#x1F4F8;</span> Capturar Foto
-          </button>
-          <button id="reset-btn" class="btn btn-outline">
-            <span>&#x21BB;</span> Resetar
-          </button>
-        </div>
+        <!-- Status de detecção de mão -->
+        <div id="hand-gesture-status"></div>
       </div>
     </main>
-
-    <footer>
-      <p>Fábrica dos Óculos &copy; 2026 - Provador Virtual</p>
-    </footer>
   </div>
 
   <script type="importmap">

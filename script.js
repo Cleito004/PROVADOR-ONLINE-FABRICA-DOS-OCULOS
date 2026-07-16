@@ -7,10 +7,10 @@ const LM = {
   leftTemple: 127, rightTemple: 356,
   leftCheek: 234, rightCheek: 454,
   forehead: 10, chin: 175,
-  noseBridge: 168, noseTip: 1, noseBottom: 2, midEye: 168, leftEyePupil: 143, rightEyePupil: 372
+  noseBridge: 168, noseTip: 1, noseBottom: 2, midEye: 168,
+  leftEyePupil: 143, rightEyePupil: 372
 };
 
-// Hand landmark indices
 const HM = {
   wrist: 0,
   thumbCMC: 1, thumbMCP: 2, thumbIP: 3, thumbTip: 4,
@@ -21,15 +21,28 @@ const HM = {
 };
 
 const LENS_COLORS = [
-  { color: '#222222', opacity: 0.7, name: 'Preto' },
-  { color: '#2a1a2e', opacity: 0.6, name: 'Gradiente' },
-  { color: '#1a1a2e', opacity: 0.5, name: 'Azul' },
-  { color: '#8B4513', opacity: 0.4, name: 'Marrom' },
-  { color: '#ffcc00', opacity: 0.3, name: 'Amarelo' },
-  { color: '#ffffff', opacity: 0.05, name: 'Transparente' },
+  { color: '#111111', opacity: 0.85, name: 'Preto' },
+  { color: '#ffffff', opacity: 0.08, name: 'Transparente' },
+  { color: '#ffcc00', opacity: 0.35, name: 'Amarelo' },
 ];
 
-const REF_MODEL_WIDTH = 50
+const FRAME_COLORS_RAINBOW = [
+  { r: 255, g: 0,   b: 0   },
+  { r: 255, g: 136, b: 0   },
+  { r: 255, g: 255, b: 0   },
+  { r: 0,   g: 255, b: 0   },
+  { r: 0,   g: 136, b: 255 },
+  { r: 136, g: 0,   b: 255 },
+  { r: 255, g: 0,   b: 255 },
+  { r: 139, g: 69,  b: 19  },
+  { r: 128, g: 128, b: 128 },
+  { r: 0,   g: 0,   b: 0   },
+  { r: 255, g: 255, b: 255 },
+];
+
+const STYLES = ['square', 'aviator', 'cateye'];
+
+const REF_MODEL_WIDTH = 50;
 
 const CFG = {
   refHeadWidth: 140,
@@ -38,15 +51,13 @@ const CFG = {
   glassesDown: 2,
   glassesCenterX: 0,
   glassesScale: 3.5,
-}
+};
 
 const STYLE_CONFIG = {
-  round:   { scale: 300, depth: 0, down: 2,  centerX: 0, upOffset: 0,  scaleFactor: 0.01, flipY: true  },
-  square:  { scale: 300, depth: 0, down: 2,  centerX: 0, upOffset: 0,  scaleFactor: 0.01, flipY: true  },
-  aviator: { scale: 300, depth: 0, down: 2,  centerX: 0, upOffset: 0.5,scaleFactor: 0.01, flipY: true  },
-  cateye:  { scale: 300, depth: 0, down: 2,  centerX: 0, upOffset: 0,  scaleFactor: 0.01, flipY: true  },
-  sport:   { scale: 300, depth: 0, down: 3,  centerX: 0, upOffset: 0,  scaleFactor: 0.01, flipY: true  },
-}
+  square:  { scale: 300, depth: 0, down: 2,  centerX: 0, upOffset: 0,  scaleFactor: 0.01, flipY: true },
+  aviator: { scale: 300, depth: 0, down: 2,  centerX: 0, upOffset: 0.5, scaleFactor: 0.01, flipY: true },
+  cateye:  { scale: 300, depth: 0, down: 2,  centerX: 0, upOffset: 0,  scaleFactor: 0.01, flipY: true },
+};
 
 let faceLandmarker;
 let handLandmarker;
@@ -57,9 +68,6 @@ let renderer, scene, camera;
 let video;
 let predictionInFlight = false;
 let isActive = false;
-let motionPrevData = null;
-let motionCooldown = 0;
-let motionHistory = [];
 
 const smooth = {
   readyPos: false,
@@ -75,14 +83,28 @@ const smooth = {
   handScanning: false,
   handScanFrames: 0,
   handScanCompleted: false,
-  lastLensIdx: -1,
   refNoseZ: 0,
 };
 
-let currentStyle = 'round';
-let currentColor = '#1a1a1a';
-let currentLensColor = '#222222';
-let currentLensOpacity = 0.7;
+let currentStyle = 'square';
+let currentColor = '#000000';
+let currentLensColor = '#111111';
+let currentLensOpacity = 0.85;
+
+const gestureState = {
+  rightHandOpen: false,
+  rightHandFist: false,
+  leftHandFingers: 0,
+  rightHandFingers: 0,
+  rightHandX: 0.5,
+  fistActiveX: null,
+  frameColorIdx: 5,
+};
+
+let adjHeight = 0;
+let adjRotation = 0;
+let adjLateral = 0;
+let adjDistance = 0;
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 function qDelta(a, b) { return 2 * Math.acos(clamp(Math.abs(a.dot(b)), 0, 1)); }
@@ -93,32 +115,60 @@ function toVec3(pts, i) {
   return new THREE.Vector3(pts[i][0] - vw/2, -pts[i][1] + vh/2, -pts[i][2]);
 }
 
-function countFingers(pts) {
-  if (!pts || pts.length < 21) return 0
-  let count = 0
-  const isRightHand = pts[HM.indexMCP][0] > pts[HM.pinkyMCP][0]
-  if (isRightHand) { if (pts[HM.thumbTip][0] < pts[HM.thumbIP][0]) count++ }
-  else { if (pts[HM.thumbTip][0] > pts[HM.thumbIP][0]) count++ }
-  if (pts[HM.indexTip][1] < pts[HM.indexPIP][1]) count++
-  if (pts[HM.middleTip][1] < pts[HM.middlePIP][1]) count++
-  if (pts[HM.ringTip][1] < pts[HM.ringPIP][1]) count++
-  if (pts[HM.pinkyTip][1] < pts[HM.pinkyPIP][1]) count++
-  return count
+function isFist(pts) {
+  if (!pts || pts.length < 21) return false;
+  const tips = [HM.thumbTip, HM.indexTip, HM.middleTip, HM.ringTip, HM.pinkyTip];
+  const mcps = [HM.thumbMCP, HM.indexMCP, HM.middleMCP, HM.ringMCP, HM.pinkyMCP];
+  let closed = 0;
+  for (let i = 1; i < tips.length; i++) {
+    if (pts[tips[i]][1] > pts[mcps[i]][1]) closed++;
+  }
+  return closed >= 3;
 }
 
-function makeEnvMap() {
-  const canvas = document.createElement('canvas')
-  canvas.width = 512; canvas.height = 512
-  const ctx = canvas.getContext('2d')
-  const grad = ctx.createRadialGradient(256, 256, 0, 256, 256, 256)
-  grad.addColorStop(0, '#ffffff')
-  grad.addColorStop(0.3, '#d8d8f0')
-  grad.addColorStop(0.6, '#8888bb')
-  grad.addColorStop(1, '#222244')
-  ctx.fillStyle = grad; ctx.fillRect(0, 0, 512, 512)
-  const tex = new THREE.CanvasTexture(canvas)
-  tex.mapping = THREE.EquirectangularReflectionMapping
-  return tex
+function countFingersHand(pts) {
+  if (!pts || pts.length < 21) return 0;
+  let count = 0;
+  const isRightHand = pts[HM.indexMCP][0] > pts[HM.pinkyMCP][0];
+  if (isRightHand) { if (pts[HM.thumbTip][0] < pts[HM.thumbIP][0]) count++; }
+  else { if (pts[HM.thumbTip][0] > pts[HM.thumbIP][0]) count++; }
+  if (pts[HM.indexTip][1] < pts[HM.indexPIP][1]) count++;
+  if (pts[HM.middleTip][1] < pts[HM.middlePIP][1]) count++;
+  if (pts[HM.ringTip][1] < pts[HM.ringPIP][1]) count++;
+  if (pts[HM.pinkyTip][1] < pts[HM.pinkyPIP][1]) count++;
+  return count;
+}
+
+function handXNormalized(pts) {
+  if (!pts || pts.length < 21) return 0.5;
+  const wrist = pts[HM.wrist];
+  const middleMcp = pts[HM.middleMCP];
+  return (wrist[0] + middleMcp[0]) / 2 / (video ? video.videoWidth : 640);
+}
+
+function frameColorFromPosition(xNorm) {
+  xNorm = clamp(xNorm, 0, 1);
+  const idx = xNorm * (FRAME_COLORS_RAINBOW.length - 1);
+  const lo = Math.floor(idx);
+  const hi = Math.min(lo + 1, FRAME_COLORS_RAINBOW.length - 1);
+  const t = idx - lo;
+  const c0 = FRAME_COLORS_RAINBOW[lo];
+  const c1 = FRAME_COLORS_RAINBOW[hi];
+  const r = Math.round(c0.r + (c1.r - c0.r) * t);
+  const g = Math.round(c0.g + (c1.g - c0.g) * t);
+  const b = Math.round(c0.b + (c1.b - c0.b) * t);
+  return { r, g, b, hex: `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}` };
+}
+
+function colorAtPosition(xNorm) {
+  xNorm = clamp(xNorm, 0, 1);
+  const idx = xNorm * (FRAME_COLORS_RAINBOW.length - 1);
+  const lo = Math.floor(idx);
+  const hi = Math.min(lo + 1, FRAME_COLORS_RAINBOW.length - 1);
+  const t = idx - lo;
+  const c0 = FRAME_COLORS_RAINBOW[lo];
+  const c1 = FRAME_COLORS_RAINBOW[hi];
+  return `rgb(${Math.round(c0.r + (c1.r - c0.r) * t)},${Math.round(c0.g + (c1.g - c0.g) * t)},${Math.round(c0.b + (c1.b - c0.b) * t)})`;
 }
 
 function midpoint(a, b) {
@@ -134,7 +184,6 @@ function toPixels(landmarks, v) {
   return landmarks.map(l => [l.x * w, l.y * h, l.z * w]);
 }
 
-
 function showToast(msg) {
   let t = document.getElementById('toast');
   if (!t) {
@@ -148,283 +197,196 @@ function showToast(msg) {
   t._hide = setTimeout(() => t.classList.remove('show'), 2500);
 }
 
-function showHandStatus(msg) {
-  let el = document.getElementById('hand-status');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'hand-status';
-    el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.85);color:#fff;padding:14px 28px;border-radius:10px;z-index:1000;font-size:18px;text-align:center;pointer-events:none;';
-    document.body.appendChild(el);
-  }
+function showGestureStatus(msg) {
+  const el = document.getElementById('hand-gesture-status');
+  if (!el) return;
   el.textContent = msg;
+  el.classList.add('show');
 }
-function hideHandStatus() {
-  const el = document.getElementById('hand-status');
-  if (el) el.remove();
+function hideGestureStatus() {
+  const el = document.getElementById('hand-gesture-status');
+  if (el) el.classList.remove('show');
 }
 
-// ── GLB Model Loader ──────────────────────────────────────────────────
+function updateStyleMatrix(activeStyle) {
+  document.querySelectorAll('#style-matrix .style-item').forEach(item => {
+    item.classList.toggle('active', item.dataset.style === activeStyle);
+  });
+}
 
-const MODEL_CACHE = {}
-function getModelEntry(style) { return MODEL_CACHE[style] }
+function updateNeedleColor(xNorm) {
+  const needle = document.getElementById('color-needle');
+  if (needle) {
+    needle.style.backgroundColor = colorAtPosition(xNorm);
+    needle.style.boxShadow = `0 0 12px ${colorAtPosition(xNorm)}`;
+  }
+}
+
+function updateSliders() {
+  const h = document.getElementById('adj-height');
+  const r = document.getElementById('adj-rotation');
+  const l = document.getElementById('adj-lateral');
+  const d = document.getElementById('adj-distance');
+  if (h) adjHeight = parseFloat(h.value);
+  if (r) adjRotation = parseFloat(r.value);
+  if (l) adjLateral = parseFloat(l.value);
+  if (d) adjDistance = parseFloat(d.value);
+}
+
+const MODEL_CACHE = {};
+function getModelEntry(style) { return MODEL_CACHE[style]; }
 const MODEL_URLS = {
-  round: 'core/assets/models/round.glb',
   square: 'core/assets/models/square.glb',
   aviator: 'core/assets/models/aviator.glb',
   cateye: 'core/assets/models/cateye.glb',
-  sport: 'core/assets/models/sport.glb',
-}
-let gltfLoader = null
+};
+let gltfLoader = null;
 function getLoader() {
-  if (!gltfLoader) gltfLoader = new GLTFLoader()
-  return gltfLoader
+  if (!gltfLoader) gltfLoader = new GLTFLoader();
+  return gltfLoader;
 }
 
 async function loadAllModels() {
-  const loader = getLoader()
-  const entries = Object.entries(MODEL_URLS)
+  const loader = getLoader();
+  const entries = Object.entries(MODEL_URLS);
   await Promise.all(entries.map(([key, url]) => {
     return new Promise((resolve, reject) => {
       loader.load(url, gltf => {
-        const scene = gltf.scene
-        const hasArm = [...scene.children].some(c => {
-          let found = false
+        const gltfScene = gltf.scene;
+        const hasArm = [...gltfScene.children].some(c => {
+          let found = false;
           c.traverse(m => {
             if (m.isMesh) {
-              const n = (m.name || '').toLowerCase()
-              if (n.includes('temple') || n.includes('arm') || n.includes('hastes') || n.includes('braço')) found = true
+              const n = (m.name || '').toLowerCase();
+              if (n.includes('temple') || n.includes('arm') || n.includes('hastes') || n.includes('braço')) found = true;
             }
-          })
-          return found
-        })
+          });
+          return found;
+        });
         if (hasArm) {
-          const hidden = []
-          scene.traverse(c => {
+          const hidden = [];
+          gltfScene.traverse(c => {
             if (c.isMesh) {
-              const n = (c.name || '').toLowerCase()
+              const n = (c.name || '').toLowerCase();
               if (n.includes('temple') || n.includes('arm') || n.includes('hastes') || n.includes('braço')) {
-                hidden.push(c)
-                c.visible = false
+                hidden.push(c);
+                c.visible = false;
               }
             }
-          })
-          const box = new THREE.Box3().setFromObject(scene)
-          const size = new THREE.Vector3()
-          box.getSize(size)
-          const maxDim = Math.max(size.x, size.y, size.z)
-          hidden.forEach(c => c.visible = true)
-          const normFactor = maxDim > 0 ? REF_MODEL_WIDTH / maxDim : 1
-          MODEL_CACHE[key] = { scene, normFactor }
+          });
+          const box = new THREE.Box3().setFromObject(gltfScene);
+          const size = new THREE.Vector3();
+          box.getSize(size);
+          const maxDim = Math.max(size.x, size.y, size.z);
+          hidden.forEach(c => c.visible = true);
+          const normFactor = maxDim > 0 ? REF_MODEL_WIDTH / maxDim : 1;
+          MODEL_CACHE[key] = { scene: gltfScene, normFactor };
         } else {
-          const box = new THREE.Box3().setFromObject(scene)
-          const size = new THREE.Vector3()
-          box.getSize(size)
-          const maxDim = Math.max(size.x, size.y, size.z)
-          const normFactor = maxDim > 0 ? REF_MODEL_WIDTH / maxDim : 1
-          MODEL_CACHE[key] = { scene, normFactor }
+          const box = new THREE.Box3().setFromObject(gltfScene);
+          const size = new THREE.Vector3();
+          box.getSize(size);
+          const maxDim = Math.max(size.x, size.y, size.z);
+          const normFactor = maxDim > 0 ? REF_MODEL_WIDTH / maxDim : 1;
+          MODEL_CACHE[key] = { scene: gltfScene, normFactor };
         }
-        resolve()
-      }, undefined, reject)
-    })
-  }))
+        resolve();
+      }, undefined, reject);
+    });
+  }));
 }
 
 function buildFromModel(style, frameColor, lensColor, lensOpacity) {
-  const entry = MODEL_CACHE[style]
-  if (!entry || !entry.scene) return new THREE.Group()
-  const clone = entry.scene.clone(true)
-  const normFactor = entry.normFactor || 1
+  const entry = MODEL_CACHE[style];
+  if (!entry || !entry.scene) return new THREE.Group();
+  const clone = entry.scene.clone(true);
+  const normFactor = entry.normFactor || 1;
 
   const frameMat = new THREE.MeshStandardMaterial({
-    color: frameColor,
-    metalness: 0.0,
-    roughness: 1.0,
-    side: THREE.DoubleSide,
-  })
+    color: frameColor, metalness: 0.0, roughness: 1.0, side: THREE.DoubleSide,
+  });
   const lensMat = new THREE.MeshPhysicalMaterial({
-    color: lensColor,
-    transparent: true,
-    opacity: lensOpacity,
-    metalness: 0.0,
-    roughness: 0.7,
-    side: THREE.DoubleSide,
-  })
+    color: lensColor, transparent: true, opacity: lensOpacity,
+    metalness: 0.0, roughness: 0.7, side: THREE.DoubleSide,
+  });
 
-  const meshes = []
+  const meshes = [];
   clone.traverse(c => {
-    if (c.isMesh) {
-      c.frustumCulled = false
-      meshes.push(c)
-    }
-  })
+    if (c.isMesh) { c.frustumCulled = false; meshes.push(c); }
+  });
 
-  let lensCount = 0, frameCount = 0
-  const frameMeshes = new Set()
+  let lensCount = 0, frameCount = 0;
+  const frameMeshes = new Set();
   meshes.forEach(c => {
-    const origMat = c.material
-    const meshName = (c.name || '').toLowerCase()
-    const matName = (origMat?.name || '').toLowerCase()
-    const transParent = origMat?.transparent || origMat?.alphaMode === 'BLEND' || (typeof origMat?.opacity === 'number' && origMat.opacity < 0.99)
+    const origMat = c.material;
+    const meshName = (c.name || '').toLowerCase();
+    const matName = (origMat?.name || '').toLowerCase();
+    const transParent = origMat?.transparent || origMat?.alphaMode === 'BLEND' || (typeof origMat?.opacity === 'number' && origMat.opacity < 0.99);
 
-    let isLens = c.userData.isLens
+    let isLens = c.userData.isLens;
     if (isLens === undefined) {
       if (meshName.includes('temple') || meshName.includes('arm') || meshName.includes('hastes') || meshName.includes('braço')) {
-        isLens = false
+        isLens = false;
       } else if (meshName.includes('lens') || meshName.includes('lente') || meshName.includes('vidro') || meshName.includes('crystal')) {
-        isLens = true
+        isLens = true;
       } else if (matName.includes('lens') || matName.includes('lente') || matName.includes('vidro') || matName.includes('crystal')) {
-        isLens = true
-      } else if ((meshName.includes('glass') || matName.includes('glass') || meshName.includes('visor') || matName.includes('visor')) && transParent) {
-        isLens = true
+        isLens = true;
       } else if (transParent) {
-        isLens = true
+        isLens = true;
       } else {
-        isLens = false
+        isLens = false;
       }
     }
-    c.material = isLens ? lensMat : frameMat
-    if (isLens) lensCount++
-    else { frameCount++; frameMeshes.add(c) }
-  })
+    c.material = isLens ? lensMat : frameMat;
+    if (isLens) lensCount++;
+    else { frameCount++; frameMeshes.add(c); }
+  });
 
   if (lensCount === 0 && frameCount > 0 && meshes.length >= 2) {
     const candidates = meshes.filter(m => {
-      const name = (m.name || '').toLowerCase()
-      return !name.includes('temple') && !name.includes('arm') && !name.includes('hastes') && !name.includes('braço')
-    })
-
+      const name = (m.name || '').toLowerCase();
+      return !name.includes('temple') && !name.includes('arm') && !name.includes('hastes') && !name.includes('braço');
+    });
     if (candidates.length >= 2) {
       const sorted = candidates.map(m => {
-        const box = new THREE.Box3().setFromObject(m)
-        const size = box.max.clone().sub(box.min)
-        return { mesh: m, volume: size.x * size.y * size.z }
-      }).sort((a, b) => a.volume - b.volume)
-
-      const nLens = Math.max(1, Math.floor(sorted.length / 2))
+        const box = new THREE.Box3().setFromObject(m);
+        const size = box.max.clone().sub(box.min);
+        return { mesh: m, volume: size.x * size.y * size.z };
+      }).sort((a, b) => a.volume - b.volume);
+      const nLens = Math.max(1, Math.floor(sorted.length / 2));
       sorted.slice(0, nLens).forEach(({ mesh }) => {
         mesh.material = new THREE.MeshPhysicalMaterial({
-          color: lensColor,
-          transparent: true,
-          opacity: lensOpacity,
-          metalness: 0.0,
-          roughness: 0.7,
-          side: THREE.DoubleSide,
-        })
-      })
+          color: lensColor, transparent: true, opacity: lensOpacity,
+          metalness: 0.0, roughness: 0.7, side: THREE.DoubleSide,
+        });
+      });
       sorted.slice(nLens).forEach(({ mesh }) => {
-        mesh.material = new THREE.MeshStandardMaterial({ color: frameColor, metalness: 0.0, roughness: 1.0, side: THREE.DoubleSide })
-        frameMeshes.add(mesh)
-      })
-    } else {
-      meshes.forEach(m => {
-        m.material = new THREE.MeshStandardMaterial({ color: frameColor, metalness: 0.0, roughness: 1.0, side: THREE.DoubleSide })
-        frameMeshes.add(m)
-      })
+        mesh.material = new THREE.MeshStandardMaterial({ color: frameColor, metalness: 0.0, roughness: 1.0, side: THREE.DoubleSide });
+        frameMeshes.add(mesh);
+      });
     }
   }
 
-  meshes.forEach(m => { m.renderOrder = 1; m.depthTest = true; m.scale.z = 1.25 })
+  meshes.forEach(m => { m.renderOrder = 1; m.depthTest = true; m.scale.z = 1.25; });
 
-  const box = new THREE.Box3().setFromObject(clone)
-  const center = new THREE.Vector3()
-  box.getCenter(center)
-  const size = new THREE.Vector3()
-  box.getSize(size)
-  const centerOffset = new THREE.Vector3().copy(center).negate()
-  const centered = new THREE.Group()
-  centered.position.copy(centerOffset)
-  centered.add(clone)
+  const box = new THREE.Box3().setFromObject(clone);
+  const center = new THREE.Vector3();
+  box.getCenter(center);
+  const centerOffset = new THREE.Vector3().copy(center).negate();
+  const centered = new THREE.Group();
+  centered.position.copy(centerOffset);
+  centered.add(clone);
 
-  const normGroup = new THREE.Group()
-  normGroup.frustumCulled = false
-  normGroup.renderOrder = 1
-  normGroup.scale.set(normFactor, normFactor, normFactor)
-  normGroup.add(centered)
+  const normGroup = new THREE.Group();
+  normGroup.frustumCulled = false;
+  normGroup.renderOrder = 1;
+  normGroup.scale.set(normFactor, normFactor, normFactor);
+  normGroup.add(centered);
 
-  const wrapper = new THREE.Group()
-  wrapper.frustumCulled = false
-  wrapper.renderOrder = 1
-  wrapper.add(normGroup)
-  return wrapper
-}
-
-function createLensMaterial(origMat) {
-  const uniforms = {
-    uVideoTex: { value: videoTexture },
-    uTime: { value: 0 },
-    uCylinder: { value: 0 },
-    uAxisRad: { value: 0 },
-    uAstigmatism: { value: 0 },
-    uBlueFilter: { value: 0 },
-    uPhotochromic: { value: 0 },
-    uBaseColor: { value: new THREE.Color(origMat.color) },
-    uBaseOpacity: { value: origMat.opacity }
-  };
-  const mat = new THREE.ShaderMaterial({
-    uniforms,
-    transparent: true,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-    vertexShader: `
-      varying vec2 vScreenUv;
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        vec4 clipPos = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        vScreenUv = clipPos.xy / clipPos.w * 0.5 + 0.5;
-        gl_Position = clipPos;
-      }
-    `,
-    fragmentShader: `
-      uniform sampler2D uVideoTex;
-      uniform float uTime;
-      uniform float uCylinder;
-      uniform float uAxisRad;
-      uniform float uAstigmatism;
-      uniform float uBlueFilter;
-      uniform float uPhotochromic;
-      uniform vec3 uBaseColor;
-      uniform float uBaseOpacity;
-
-      varying vec2 vScreenUv;
-      varying vec2 vUv;
-
-      void main() {
-        vec2 uv = vScreenUv;
-        uv.x = 1.0 - uv.x;
-
-        if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
-          gl_FragColor = vec4(uBaseColor, 0.0);
-          return;
-        }
-
-        if (uAstigmatism > 0.5) {
-          vec2 dir = vec2(cos(uAxisRad), sin(uAxisRad));
-          vec2 perp = vec2(-dir.y, dir.x);
-          float d = dot(uv, dir);
-          float p = dot(uv, perp);
-          p += uCylinder * 0.015 * (d - 0.5);
-          uv = dir * d + perp * p;
-        }
-
-        vec4 vid = texture2D(uVideoTex, uv);
-        vec3 col = vid.rgb;
-
-        if (uBlueFilter > 0.5) {
-          col.b *= 0.4;
-          col.r *= 0.7;
-          col.g *= 0.7;
-        }
-
-        float phot = clamp(uPhotochromic, 0.0, 1.0);
-        col = mix(col, col * 0.7 + vec3(0.15, 0.1, 0.05), phot);
-
-        float alpha = uBaseOpacity * vid.a;
-        gl_FragColor = vec4(col, alpha);
-      }
-    `
-  });
-  return mat;
+  const wrapper = new THREE.Group();
+  wrapper.frustumCulled = false;
+  wrapper.renderOrder = 1;
+  wrapper.add(normGroup);
+  return wrapper;
 }
 
 function rebuildGlasses() {
@@ -448,10 +410,7 @@ function rebuildGlasses() {
   if (!isActive) {
     glassesGroup.visible = false;
   }
-
 }
-
-// ── Scene Setup ─────────────────────────────────────────────────────────
 
 async function initScene(videoEl) {
   video = videoEl;
@@ -503,25 +462,16 @@ async function initScene(videoEl) {
       uniform float uSharpen;
       uniform vec2 uTexelSize;
       varying vec2 vUv;
-
       void main() {
         vec4 color = texture2D(tDiffuse, vUv);
-
-        // brightness
         color.rgb += uBrightness;
-
-        // contrast
         if (uContrast > 0.0) {
           color.rgb = (color.rgb - 0.5) / (1.0 - uContrast) + 0.5;
         } else {
           color.rgb = (color.rgb - 0.5) * (1.0 + uContrast) + 0.5;
         }
-
-        // saturation
         float luma = dot(color.rgb, vec3(0.299, 0.587, 0.114));
         color.rgb = mix(vec3(luma), color.rgb, uSaturation);
-
-        // sharpen (unsharp mask)
         if (uSharpen > 0.0) {
           vec4 n  = texture2D(tDiffuse, vUv + vec2(0.0, uTexelSize.y));
           vec4 s  = texture2D(tDiffuse, vUv - vec2(0.0, uTexelSize.y));
@@ -530,7 +480,6 @@ async function initScene(videoEl) {
           vec4 blur = (n + s + e + w) * 0.25;
           color.rgb += (color.rgb - blur.rgb) * uSharpen;
         }
-
         color.rgb = clamp(color.rgb, 0.0, 1.0);
         gl_FragColor = color;
       }
@@ -544,8 +493,8 @@ async function initScene(videoEl) {
   videoSprite.position.set(0, 0, 0);
   scene.add(videoSprite);
 
-  scene.environment = makeEnvMap()
-  scene.environmentIntensity = 0.08
+  scene.environment = makeEnvMap();
+  scene.environmentIntensity = 0.08;
 
   const amb = new THREE.HemisphereLight(0xffffff, 0x8888cc, 0.8);
   scene.add(amb);
@@ -585,11 +534,23 @@ async function initScene(videoEl) {
     if (videoTexture) videoTexture.needsUpdate = true;
     renderer.render(scene, camera);
   }
-
   animate();
 }
 
-// ── MediaPipe Engine ────────────────────────────────────────────────────
+function makeEnvMap() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512; canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+  const grad = ctx.createRadialGradient(256, 256, 0, 256, 256, 256);
+  grad.addColorStop(0, '#ffffff');
+  grad.addColorStop(0.3, '#d8d8f0');
+  grad.addColorStop(0.6, '#8888bb');
+  grad.addColorStop(1, '#222244');
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, 512, 512);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  return tex;
+}
 
 async function initMediaPipe(delegate) {
   const dl = delegate || 'GPU';
@@ -656,60 +617,7 @@ function runPrediction() {
 
   try {
     const detection = faceLandmarker.detectForVideo(video, performance.now());
-      const results = { faceLandmarks: detection.faceLandmarks || [] };
-
-    // ── Gesture swipe (esquerda→direita apenas) ────────────────────
-    if (video.videoWidth > 0 && motionCooldown === 0) {
-      try {
-        if (!window._motionCanvas) {
-          window._motionCanvas = document.createElement('canvas')
-          window._motionCanvas.width = 48; window._motionCanvas.height = 36
-          window._motionCtx = window._motionCanvas.getContext('2d')
-        }
-        const ctx = window._motionCtx
-        ctx.drawImage(video, 0, 0, 48, 36)
-        const data = ctx.getImageData(0, 0, 48, 36).data
-
-        if (motionPrevData) {
-          let sumX = 0, total = 0
-          for (let y = 6; y < 30; y++) {
-            for (let x = 6; x < 42; x++) {
-              const i = (y * 48 + x) * 4
-              const d = Math.abs(data[i] - motionPrevData[i]) +
-                        Math.abs(data[i+1] - motionPrevData[i+1]) +
-                        Math.abs(data[i+2] - motionPrevData[i+2])
-              if (d > 40) { sumX += x * d; total += d }
-            }
-          }
-          if (total > 300) {
-            const cx = sumX / total
-              motionHistory.push(cx)
-              if (motionHistory.length > 4) motionHistory.shift()
-              if (motionHistory.length === 4) {
-                const d1 = motionHistory[2] - motionHistory[0]
-                const d2 = motionHistory[3] - motionHistory[1]
-                if (d1 < -3 && d2 < -3) {
-                  motionCooldown = 30
-                  motionHistory = []
-                  const styles = ['round', 'square', 'aviator', 'cateye', 'sport']
-                  const idx = styles.indexOf(currentStyle)
-                  const next = styles[(idx + 1) % styles.length]
-                  currentStyle = next; rebuildGlasses()
-                  document.querySelectorAll('.glasses-option').forEach(b => b.classList.remove('active'))
-                  const nb = document.querySelector(`.glasses-option[data-style="${next}"]`)
-                  if (nb) nb.classList.add('active')
-                  const labelEl = nb?.querySelector('span:last-child')
-                  showToast(`Mão: ${labelEl ? labelEl.textContent : next}`)
-                } else {
-                  motionHistory = []
-                }
-              }
-          }
-        }
-        motionPrevData = data
-      } catch {}
-    }
-    if (motionCooldown > 0) motionCooldown--
+    const results = { faceLandmarks: detection.faceLandmarks || [] };
 
     if (results.faceLandmarks && results.faceLandmarks.length > 0) {
       const pts = toPixels(results.faceLandmarks[0], video);
@@ -725,7 +633,7 @@ function runPrediction() {
       const lChk = toVec3(pts, LM.leftCheek);
       const rChk = toVec3(pts, LM.rightCheek);
 
-      const sc = STYLE_CONFIG[currentStyle] || STYLE_CONFIG.round
+      const sc = STYLE_CONFIG[currentStyle] || STYLE_CONFIG.square;
       const eMid = midpoint(lEye, rEye);
       const eW = lEye.distanceTo(rEye);
       const tW = lTmp.distanceTo(rTmp);
@@ -745,83 +653,72 @@ function runPrediction() {
       const hS = fH / CFG.refFaceHeight;
       const bS = wS * 0.7 + hS * 0.3;
 
-      // Depth adjustment: use Z-component of nose tip→bridge vector for head tilt
-      // and compare against reference Z captured during scan
-      const noseTipZ = nTip.z - nose.z
-      const noseZDelta = smooth.scanCompleted ? (nose.z - smooth.refNoseZ) : 0
-      const depAdj = clamp(noseTipZ * 0.06 - noseZDelta * 0.04, -1, 3)
+      const noseTipZ = nTip.z - nose.z;
+      const noseZDelta = smooth.scanCompleted ? (nose.z - smooth.refNoseZ) : 0;
+      const depAdj = clamp(noseTipZ * 0.06 - noseZDelta * 0.04, -1, 3);
 
       const tPos = nose.clone()
-        .addScaledVector(xAxis, sc.centerX)
-        .addScaledVector(yAxis, sc.down)
-        .addScaledVector(zAxis, CFG.glassesDepth + depAdj)
+        .addScaledVector(xAxis, sc.centerX + adjLateral)
+        .addScaledVector(yAxis, sc.down + adjHeight)
+        .addScaledVector(zAxis, CFG.glassesDepth + depAdj + adjDistance);
 
       const tScaleVal = bS * CFG.glassesScale;
       const tScale = new THREE.Vector3(tScaleVal, tScaleVal, tScaleVal);
 
-      const rotMat = new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis)
-      const targetQuat = new THREE.Quaternion().setFromRotationMatrix(rotMat)
-
-      // ── Tracking + Scan (independentes) ─────────────────────────
-      // Reposicionamento começa do frame 1, scan é só feedback visual
+      let rotMat = new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis);
+      if (adjRotation !== 0) {
+        const tilt = new THREE.Matrix4().makeRotationZ(THREE.MathUtils.degToRad(adjRotation));
+        rotMat.multiply(tilt);
+      }
+      const targetQuat = new THREE.Quaternion().setFromRotationMatrix(rotMat);
 
       if (!smooth.scanCompleted) {
         if (!smooth.scanning) {
-          smooth.scanning = true
-          smooth.scanFrames = []
-          scanOverlay.classList.remove('hidden')
-          scanStatus.textContent = 'Escaneando...'
-          scanProgressBar.style.width = '0%'
+          smooth.scanning = true;
+          smooth.scanFrames = [];
+          scanOverlay.classList.remove('hidden');
+          scanStatus.textContent = 'Escaneando...';
+          scanProgressBar.style.width = '0%';
         }
-        smooth.scanFrames.push({ x: tPos.x, y: tPos.y, z: nose.z })
-        const pct = Math.min(smooth.scanFrames.length / 10, 1) * 100
-        scanProgressBar.style.width = pct + '%'
+        smooth.scanFrames.push({ x: tPos.x, y: tPos.y, z: nose.z });
+        const pct = Math.min(smooth.scanFrames.length / 10, 1) * 100;
+        scanProgressBar.style.width = pct + '%';
         if (smooth.scanFrames.length >= 10) {
-          smooth.scanCompleted = true
-          smooth.scanning = false
-          smooth.refNoseZ = smooth.scanFrames.reduce((s, f) => s + f.z, 0) / smooth.scanFrames.length
-          scanOverlay.classList.add('hidden')
+          smooth.scanCompleted = true;
+          smooth.scanning = false;
+          smooth.refNoseZ = smooth.scanFrames.reduce((s, f) => s + f.z, 0) / smooth.scanFrames.length;
+          scanOverlay.classList.add('hidden');
         } else {
-          scanStatus.textContent = `${smooth.scanFrames.length}/10`
+          scanStatus.textContent = `${smooth.scanFrames.length}/10`;
         }
       }
 
       const avgPos = tPos.clone();
-
       const mov = avgPos.distanceTo(smooth.prev);
-      smooth.prev.copy(avgPos)
+      smooth.prev.copy(avgPos);
 
-      const aP = clamp(0.97 + mov * 0.02, 0.97, 0.99)
-      const aS = clamp(0.96 + mov * 0.03, 0.96, 0.99)
+      const aP = clamp(0.97 + mov * 0.02, 0.97, 0.99);
+      const aS = clamp(0.96 + mov * 0.03, 0.96, 0.99);
 
       if (!smooth.readyPos) {
-        smooth.pos.copy(avgPos)
-        smooth.scale.copy(tScale)
-        smooth.readyPos = true
+        smooth.pos.copy(avgPos);
+        smooth.scale.copy(tScale);
+        smooth.readyPos = true;
       } else {
-        smooth.pos.lerp(avgPos, aP)
-        smooth.scale.lerp(tScale, aS)
+        smooth.pos.lerp(avgPos, aP);
+        smooth.scale.lerp(tScale, aS);
       }
 
       if (!smooth.readyRot) {
-        smooth.quat.copy(targetQuat)
-        smooth.readyRot = true
+        smooth.quat.copy(targetQuat);
+        smooth.readyRot = true;
       } else {
-        const aR = qDelta(smooth.quat, targetQuat)
-        smooth.quat.slerp(targetQuat, clamp(0.88 + aR * 1.1, 0.88, 0.99))
+        const aR = qDelta(smooth.quat, targetQuat);
+        smooth.quat.slerp(targetQuat, clamp(0.88 + aR * 1.1, 0.88, 0.99));
       }
 
-      const fRatio = fW / fH;
-      const jwRatio = tW / fH;
-      let faceShape = 'redondo';
-      if (fRatio > 1.05) faceShape = 'oval';
-      if (fRatio < 0.85) faceShape = 'longo';
-      if (jwRatio > 1.1 && fRatio < 0.95) faceShape = 'quadrado';
-      if (jwRatio < 0.85 && fRatio > 0.9) faceShape = 'coração';
-      const pdMm = (eW * 0.39).toFixed(1);
-
       const fi = document.getElementById('face-info');
-      if (fi) { fi.textContent = `Formato: ${faceShape} | DP: ${pdMm}mm`; fi.classList.remove('hidden'); }
+      if (fi) { fi.textContent = `Formato: detectado`; fi.classList.remove('hidden'); }
 
       glassesGroup.position.copy(smooth.pos);
       glassesGroup.quaternion.copy(smooth.quat);
@@ -842,46 +739,110 @@ function runPrediction() {
       if (fi) fi.classList.add('hidden');
     }
 
-    // ── Hand detection & finger control ─────────────────────
     if (handLandmarker) {
       try {
         const handResult = handLandmarker.detectForVideo(video, performance.now());
         const handLandmarks = handResult.landmarks || [];
-
-        let totalFingers = 0;
-        const vw = video.videoWidth || 640;
-        const vh = video.videoHeight || 480;
-        for (let h = 0; h < handLandmarks.length; h++) {
-          const pts = handLandmarks[h].map(l => [l.x * vw, l.y * vh, l.z * vw]);
-          totalFingers += countFingers(pts);
-        }
 
         if (smooth.scanCompleted) {
           if (!smooth.handScanCompleted) {
             if (!smooth.handScanning) {
               smooth.handScanning = true;
               smooth.handScanFrames = 0;
-              showHandStatus('Mostre as duas mãos abertas');
+              showGestureStatus('Mostre as duas mãos abertas');
             }
             if (handLandmarks.length >= 1) smooth.handScanFrames++;
             if (smooth.handScanFrames >= 15) {
               smooth.handScanCompleted = true;
               smooth.handScanning = false;
-              hideHandStatus();
-              showToast('Mãos escaneadas! Mostre dedos para trocar cor da lente');
+              hideGestureStatus();
+              showToast('Mãos calibradas! Use gestos para controlar');
             }
+            predictionInFlight = false;
+            schedulePrediction();
+            return;
           }
 
-          if (smooth.handScanCompleted && totalFingers > 0) {
-            const idx = Math.min(totalFingers - 1, LENS_COLORS.length - 1);
-            if (idx !== smooth.lastLensIdx) {
-              smooth.lastLensIdx = idx;
-              currentLensColor = LENS_COLORS[idx].color;
-              currentLensOpacity = LENS_COLORS[idx].opacity;
+          let leftHandPts = null;
+          let rightHandPts = null;
+
+          for (let h = 0; h < handLandmarks.length; h++) {
+            const hpts = handLandmarks[h].map(l => [l.x * (video.videoWidth || 640), l.y * (video.videoHeight || 480), l.z * (video.videoWidth || 640)]);
+            const isRight = hpts[HM.indexMCP][0] > hpts[HM.pinkyMCP][0];
+            if (isRight) rightHandPts = hpts;
+            else leftHandPts = hpts;
+          }
+
+          if (leftHandPts) {
+            const leftFingers = countFingersHand(leftHandPts);
+            const lensIdx = Math.min(leftFingers, LENS_COLORS.length - 1);
+            if (lensIdx !== smooth.lastLensIdx) {
+              smooth.lastLensIdx = lensIdx;
+              currentLensColor = LENS_COLORS[lensIdx].color;
+              currentLensOpacity = LENS_COLORS[lensIdx].opacity;
               rebuildGlasses();
-              document.querySelectorAll('#lens-color-list .color-option').forEach(b => b.classList.remove('active'));
-              const btn = document.querySelector(`#lens-color-list .color-option[data-color="${currentLensColor}"]`);
-              if (btn) btn.classList.add('active');
+              showToast(`Lente: ${LENS_COLORS[lensIdx].name}`);
+            }
+            gestureState.leftHandFingers = leftFingers;
+          } else {
+            gestureState.leftHandFingers = 0;
+          }
+
+          if (rightHandPts) {
+            const fist = isFist(rightHandPts);
+            const openFingers = countFingersHand(rightHandPts);
+
+            if (fist) {
+              if (!gestureState.rightHandFist) {
+                gestureState.rightHandFist = true;
+                gestureState.fistActiveX = handXNormalized(rightHandPts);
+                const strip = document.getElementById('color-strip');
+                if (strip) strip.classList.add('active');
+              }
+              const handX = handXNormalized(rightHandPts);
+              const deltaX = handX - (gestureState.fistActiveX || 0.5);
+              const sensitiveX = clamp(0.5 + deltaX * 4, 0, 1);
+              gestureState.fistActiveX = handX;
+
+              const fc = frameColorFromPosition(sensitiveX);
+              currentColor = fc.hex;
+              gestureState.frameColorIdx = Math.round(sensitiveX * (FRAME_COLORS_RAINBOW.length - 1));
+              rebuildGlasses();
+
+              const needle = document.getElementById('color-needle');
+              if (needle) {
+                needle.style.left = (sensitiveX * 100) + '%';
+                needle.style.backgroundColor = colorAtPosition(sensitiveX);
+                needle.style.boxShadow = `0 0 12px ${colorAtPosition(sensitiveX)}`;
+              }
+              showGestureStatus(`Armação: cor RGB`);
+            } else {
+              if (gestureState.rightHandFist) {
+                gestureState.rightHandFist = false;
+                gestureState.fistActiveX = null;
+                const strip = document.getElementById('color-strip');
+                if (strip) strip.classList.remove('active');
+              }
+
+              if (openFingers >= 1 && openFingers <= 3) {
+                const styleIdx = Math.min(openFingers - 1, STYLES.length - 1);
+                const newStyle = STYLES[styleIdx];
+                if (newStyle !== currentStyle) {
+                  currentStyle = newStyle;
+                  rebuildGlasses();
+                  updateStyleMatrix(currentStyle);
+                  showToast(`Estilo: ${currentStyle}`);
+                }
+                gestureState.rightHandOpen = true;
+              }
+              gestureState.rightHandFingers = openFingers;
+            }
+          } else {
+            if (gestureState.rightHandFist) {
+              gestureState.rightHandFist = false;
+              gestureState.fistActiveX = null;
+              const strip = document.getElementById('color-strip');
+              if (strip) strip.classList.remove('active');
             }
           }
         }
@@ -895,8 +856,6 @@ function runPrediction() {
   schedulePrediction();
 }
 
-// ── Main App ────────────────────────────────────────────────────────────
-
 const startBtn = document.getElementById('start-btn');
 const loadingOverlay = document.getElementById('loading-overlay');
 const loadingText = document.getElementById('loading-text');
@@ -906,14 +865,16 @@ const errorMessage = document.getElementById('error-message');
 const retryBtn = document.getElementById('retry-btn');
 const startPrompt = document.getElementById('start-prompt');
 const webcam = document.getElementById('webcam');
-const screenshotBtn = document.getElementById('screenshot-btn');
-const resetBtn = document.getElementById('reset-btn');
 
 const scanOverlay = document.getElementById('scan-overlay');
 const scanTitle = document.getElementById('scan-title');
 const scanMessage = document.getElementById('scan-message');
 const scanProgressBar = document.getElementById('scan-progress-bar');
 const scanStatus = document.getElementById('scan-status');
+
+document.querySelectorAll('#adjustment-panel input[type="range"]').forEach(slider => {
+  slider.addEventListener('input', updateSliders);
+});
 
 function showError(title, msg) {
   loadingOverlay.classList.add('hidden');
@@ -960,7 +921,7 @@ async function startApp() {
     });
     webcam.srcObject = stream;
     await webcam.play();
-    await new Promise(r => { const c = () => { if (webcam.videoWidth > 0) r(); else requestAnimationFrame(c) }; requestAnimationFrame(c) });
+    await new Promise(r => { const c = () => { if (webcam.videoWidth > 0) r(); else requestAnimationFrame(c); }; requestAnimationFrame(c); });
   } catch (e) {
     loadingOverlay.classList.add('hidden');
     startPrompt.classList.remove('hidden');
@@ -983,8 +944,8 @@ async function startApp() {
   if (!ok) {
     showError(
       'Falha ao carregar IA',
-      'Nao foi possivel carregar o modelo de deteccao facial. ' +
-      'Verifique sua conexao de internet e tente novamente.'
+      'Não foi possível carregar o modelo de detecção facial. ' +
+      'Verifique sua conexão de internet e tente novamente.'
     );
     return;
   }
@@ -997,419 +958,5 @@ async function startApp() {
   schedulePrediction();
 }
 
-retryBtn.addEventListener('click', () => {
-  startApp();
-});
-
-// ── UI Events ───────────────────────────────────────────────────────────
-
+retryBtn.addEventListener('click', startApp);
 startBtn.addEventListener('click', startApp);
-
-document.querySelectorAll('.glasses-option').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.glasses-option').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    currentStyle = btn.dataset.style;
-    rebuildGlasses();
-  });
-});
-
-document.querySelectorAll('#color-list .color-option').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('#color-list .color-option').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    currentColor = btn.dataset.color;
-    rebuildGlasses();
-  });
-});
-
-document.querySelectorAll('#lens-color-list .color-option').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('#lens-color-list .color-option').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    currentLensColor = btn.dataset.color;
-    currentLensOpacity = parseFloat(btn.dataset.opacity) || 0.5;
-    rebuildGlasses();
-  });
-});
-
-screenshotBtn.addEventListener('click', () => {
-  if (!renderer) { showToast('Ative a câmera primeiro'); return; }
-  renderer.render(scene, camera);
-  const link = document.createElement('a');
-  link.download = 'provador-virtual-' + Date.now() + '.png';
-  link.href = renderer.domElement.toDataURL('image/png');
-  link.click();
-  showToast('Foto salva!');
-});
-
-resetBtn.addEventListener('click', () => {
-  if (glassesGroup) {
-    smooth.readyPos = false;
-    smooth.readyRot = false;
-    smooth.scanning = false;
-    smooth.scanCompleted = false;
-    smooth.scanFrames = [];
-    glassesGroup.position.set(0, 0, 0);
-    glassesGroup.quaternion.identity();
-    glassesGroup.scale.set(1, 1, 1);
-    scanOverlay.classList.add('hidden');
-  }
-  document.querySelectorAll('.glasses-option').forEach(b => b.classList.remove('active'));
-  document.querySelector('.glasses-option[data-style="round"]').classList.add('active');
-  document.querySelectorAll('#color-list .color-option').forEach(b => b.classList.remove('active'));
-  document.querySelector('#color-list .color-option[data-color="#1a1a1a"]').classList.add('active');
-  document.querySelectorAll('#lens-color-list .color-option').forEach(b => b.classList.remove('active'));
-  document.querySelector('#lens-color-list .color-option[data-color="#222222"]').classList.add('active');
-  currentStyle = 'round';
-  currentColor = '#1a1a1a';
-  currentLensColor = '#222222';
-  currentLensOpacity = 0.7;
-  rebuildGlasses();
-});
-
-// ── Moondream AI Client ───────────────────────────────────────────────
-
-const WS_URL = 'ws://localhost:8080'
-
-const mdUI = {
-  status: document.getElementById('moondream-status'),
-  results: document.getElementById('moondream-results'),
-  faceShape: document.getElementById('md-face-shape'),
-  recommendations: document.getElementById('md-recommendations'),
-  analyzeBtn: document.getElementById('md-analyze-btn'),
-  autoFitBtn: document.getElementById('md-autofit-btn'),
-  prescriptionInput: document.getElementById('md-prescription-input'),
-  prescriptionLabel: document.getElementById('md-prescription-label'),
-}
-
-let mdWs = null
-let mdConnected = false
-
-const STYLE_IDS = {
-  redondo: 'round', quadrado: 'square', aviador: 'aviator',
-  gatinho: 'cateye', esportivo: 'sport', oval: 'oval',
-  round: 'round', square: 'square', aviator: 'aviator',
-  cateye: 'cateye', sport: 'sport', oval: 'oval',
-}
-
-function connectMoondream() {
-  if (mdWs) return
-  try {
-    mdWs = new WebSocket(WS_URL)
-    mdWs.onopen = () => {
-      mdConnected = true
-      mdUI.status.textContent = 'IA conectada'
-      mdUI.status.className = 'md-status online'
-      mdUI.analyzeBtn.disabled = false
-      mdUI.autoFitBtn.disabled = false
-      mdUI.prescriptionLabel.removeAttribute('aria-disabled')
-    }
-    mdWs.onmessage = (e) => {
-      try {
-        const msg = JSON.parse(e.data)
-        handleMdMessage(msg)
-      } catch { /* ignore parse errors */ }
-    }
-    mdWs.onclose = () => {
-      mdConnected = false
-      mdUI.status.textContent = 'IA offline'
-      mdUI.status.className = 'md-status offline'
-      mdUI.analyzeBtn.disabled = true
-      mdUI.autoFitBtn.disabled = true
-      mdUI.prescriptionLabel.setAttribute('aria-disabled', 'true')
-      mdWs = null
-      setTimeout(connectMoondream, 5000)
-    }
-    mdWs.onerror = () => { if (mdWs) mdWs.close() }
-  } catch { /* no ws */ }
-}
-
-function handleMdMessage(msg) {
-  switch (msg.type) {
-    case 'connected':
-      break
-
-    case 'face-analysis':
-      mdUI.status.className = 'md-status online'
-      mdUI.status.textContent = 'IA conectada'
-      if (msg.error) {
-        showToast('Falha na análise: ' + msg.error)
-        return
-      }
-      mdUI.faceShape.textContent = msg.faceShape
-      if (msg.recommendations && msg.recommendations.length > 0) {
-        mdUI.recommendations.innerHTML = msg.recommendations.map(r =>
-          `<span class="rec-tag" data-style="${r.id}">${r.label}</span>`
-        ).join('')
-        mdUI.recommendations.querySelectorAll('.rec-tag').forEach(el => {
-          el.addEventListener('click', () => {
-            const style = el.dataset.style
-            const btn = document.querySelector(`.glasses-option[data-style="${style}"]`)
-            if (btn) btn.click()
-            showToast(`Estilo "${el.textContent}" selecionado!`)
-          })
-        })
-      }
-      mdUI.results.classList.remove('hidden')
-      break
-
-    case 'auto-fit-result':
-      mdUI.status.className = 'md-status online'
-      mdUI.status.textContent = 'IA conectada'
-      if (msg.error) { showToast('Auto-fit falhou: ' + msg.error); return }
-      mdUI.faceShape.textContent = msg.faceShape
-      if (msg.recommendations && msg.recommendations.length > 0) {
-        mdUI.recommendations.innerHTML = msg.recommendations.map(r =>
-          `<span class="rec-tag" data-style="${r.id}">${r.label}</span>`
-        ).join('')
-        mdUI.recommendations.querySelectorAll('.rec-tag').forEach(el => {
-          el.addEventListener('click', () => {
-            const style = el.dataset.style
-            const btn = document.querySelector(`.glasses-option[data-style="${style}"]`)
-            if (btn) btn.click()
-            showToast(`Estilo "${el.textContent}" selecionado!`)
-          })
-        })
-        const bestStyle = msg.bestPick || msg.recommendations[0].id
-        const btn = document.querySelector(`.glasses-option[data-style="${bestStyle}"]`)
-        if (btn) btn.click()
-        showToast(`Auto ajuste: ${msg.faceShape} → ${STYLE_IDS[bestStyle] || bestStyle}!`)
-      }
-      mdUI.results.classList.remove('hidden')
-      break
-
-    case 'prescription-ocr-result':
-      if (msg.error) { showToast('Falha ao ler receita: ' + msg.error); return }
-      if (msg.rawText) {
-        const msg2 = msg.structured ? `Receita lida!\nOD: ${msg.structured.od.sphere || '?'} | OE: ${msg.structured.os.sphere || msg.structured.od.sphere || '?'}` : 'Receita lida!'
-        showToast(msg2)
-        const existing = document.getElementById('md-prescription-text')
-        if (!existing) {
-          const el = document.createElement('div')
-          el.id = 'md-prescription-text'
-          el.style.cssText = 'font-size:11px;color:var(--text-dim);padding:6px 8px;background:var(--surface2);border-radius:6px;max-height:80px;overflow-y:auto;margin-top:4px;'
-          mdUI.results.after(el)
-        }
-        const el = document.getElementById('md-prescription-text')
-        el.textContent = msg.rawText.slice(0, 300) + (msg.rawText.length > 300 ? '...' : '')
-      }
-      break
-
-    case 'glasses-fit-analysis':
-      if (msg.analysis) {
-        showToast('Ajuste: ' + msg.analysis)
-      }
-      break
-  }
-}
-
-function sendToMoondream(type, payload) {
-  if (!mdWs || mdWs.readyState !== WebSocket.OPEN) {
-    showToast('IA Moondream offline')
-    return false
-  }
-  mdWs.send(JSON.stringify({ type, ...payload }))
-  return true
-}
-
-function captureFrame() {
-  if (!renderer || !video) return null
-  renderer.render(scene, camera)
-  return renderer.domElement.toDataURL('image/jpeg', 0.5)
-}
-
-mdUI.analyzeBtn.addEventListener('click', () => {
-  const dataUrl = captureFrame()
-  if (!dataUrl) { showToast('Ative a câmera primeiro'); return }
-  mdUI.status.textContent = 'Analisando...'
-  mdUI.status.className = 'md-status loading'
-  sendToMoondream('analyze-face', { imageData: dataUrl.split(',')[1], glassesStyle: currentStyle })
-})
-
-mdUI.autoFitBtn.addEventListener('click', () => {
-  const dataUrl = captureFrame()
-  if (!dataUrl) { showToast('Ative a câmera primeiro'); return }
-  mdUI.status.textContent = 'Analisando...'
-  mdUI.status.className = 'md-status loading'
-  sendToMoondream('auto-fit', { imageData: dataUrl.split(',')[1] })
-})
-
-mdUI.prescriptionInput.addEventListener('change', (e) => {
-  const file = e.target.files[0]
-  if (!file) return
-  const reader = new FileReader()
-  reader.onload = (ev) => {
-    mdUI.status.textContent = 'Lendo receita...'
-    mdUI.status.className = 'md-status loading'
-    sendToMoondream('prescription-ocr', { imageData: ev.target.result.split(',')[1] })
-  }
-  reader.readAsDataURL(file)
-})
-
-// Also connect Moondream when camera starts
-const origStartApp = startApp
-startApp = async function() {
-  await origStartApp.call(this)
-  connectMoondream()
-}
-
-// ── OpenCV Backend Client ───────────────────────────────────────────────
-
-const OPENCV_URL = 'http://localhost:5050'
-
-const ocvUI = {
-  status: document.getElementById('opencv-status'),
-  results: document.getElementById('opencv-results'),
-  detector: document.getElementById('ocv-detector'),
-  faces: document.getElementById('ocv-faces'),
-  shape: document.getElementById('ocv-shape'),
-  lighting: document.getElementById('ocv-lighting'),
-  bestStyle: document.getElementById('ocv-best-style'),
-  recommendations: document.getElementById('ocv-recommendations'),
-  analyzeBtn: document.getElementById('opencv-analyze-btn'),
-  autoBtn: document.getElementById('opencv-auto-btn'),
-}
-
-let ocvConnected = false
-
-async function connectOpenCV() {
-  try {
-    const res = await fetch(`${OPENCV_URL}/api/health`)
-    if (res.ok) {
-      const data = await res.json()
-      ocvConnected = true
-      ocvUI.status.textContent = `Backend online (OpenCV ${data.opencv_version})`
-      ocvUI.status.className = 'opencv-status online'
-      ocvUI.analyzeBtn.disabled = false
-      ocvUI.autoBtn.disabled = false
-    }
-  } catch {
-    ocvConnected = false
-    ocvUI.status.textContent = 'Backend offline'
-    ocvUI.status.className = 'opencv-status offline'
-    ocvUI.analyzeBtn.disabled = true
-    ocvUI.autoBtn.disabled = true
-    setTimeout(connectOpenCV, 5000)
-  }
-}
-
-async function analyzeWithOpenCV() {
-  if (!ocvConnected) {
-    showToast('Backend OpenCV offline')
-    return
-  }
-  const dataUrl = captureFrame()
-  if (!dataUrl) {
-    showToast('Ative a câmera primeiro')
-    return
-  }
-
-  ocvUI.status.textContent = 'Analisando...'
-  ocvUI.status.className = 'opencv-status loading'
-
-  try {
-    const res = await fetch(`${OPENCV_URL}/api/analyze`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image: dataUrl })
-    })
-
-    const data = await res.json()
-
-    if (!data.success) {
-      showToast('Falha na análise: ' + (data.error || 'Erro desconhecido'))
-      ocvUI.status.textContent = 'Erro na análise'
-      ocvUI.status.className = 'opencv-status error'
-      return
-    }
-
-    ocvUI.status.textContent = 'Análise completa'
-    ocvUI.status.className = 'opencv-status online'
-
-    ocvUI.detector.textContent = data.faces.detector === 'dnn' ? 'DNN SSD' : 'Haar Cascade'
-    ocvUI.faces.textContent = data.faces.faces_count
-
-    if (data.faces.faces.length > 0) {
-      const face = data.faces.faces[0]
-      ocvUI.shape.textContent = face.face_shape || '-'
-
-      if (face.glasses_fit && face.glasses_fit.length > 0) {
-        const best = face.glasses_fit[0]
-        ocvUI.bestStyle.textContent = `${best.description} (${best.score}%)`
-      }
-    }
-
-    ocvUI.lighting.textContent = data.lighting.condition
-
-    ocvUI.recommendations.innerHTML = data.recommendations.map(r => {
-      const icon = r.type === 'success' ? '&#x2705;' : (r.type === 'warning' ? '&#x26A0;&#xFE0F;' : (r.type === 'error' ? '&#x274C;' : '&#x2139;&#xFE0F;'))
-      return `<div class="ocv-rec ${r.type}">${icon} ${r.message}</div>`
-    }).join('')
-
-    ocvUI.results.classList.remove('hidden')
-    showToast('Análise OpenCV concluída!')
-  } catch (e) {
-    console.error('OpenCV analyze error:', e)
-    showToast('Erro ao conectar com backend OpenCV')
-    ocvUI.status.textContent = 'Erro de conexão'
-    ocvUI.status.className = 'opencv-status error'
-  }
-}
-
-function autoFitOpenCV() {
-  if (!ocvConnected) {
-    showToast('Backend OpenCV offline')
-    return
-  }
-  const dataUrl = captureFrame()
-  if (!dataUrl) {
-    showToast('Ative a câmera primeiro')
-    return
-  }
-
-  ocvUI.status.textContent = 'Auto ajuste...'
-  ocvUI.status.className = 'opencv-status loading'
-
-  fetch(`${OPENCV_URL}/api/analyze`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image: dataUrl })
-  })
-  .then(res => res.json())
-  .then(data => {
-    if (!data.success || !data.faces.faces.length) {
-      showToast('Nenhum rosto detectado para auto-ajuste')
-      ocvUI.status.textContent = 'Sem rosto detectado'
-      ocvUI.status.className = 'opencv-status error'
-      return
-    }
-
-    const face = data.faces.faces[0]
-    if (face.glasses_fit && face.glasses_fit.length > 0) {
-      const best = face.glasses_fit[0]
-      const btn = document.querySelector(`.glasses-option[data-style="${best.style}"]`)
-      if (btn) {
-        btn.click()
-        showToast(`Auto ajuste: ${face.face_shape} → ${best.description}!`)
-      }
-    }
-
-    ocvUI.status.textContent = 'Auto ajuste aplicado'
-    ocvUI.status.className = 'opencv-status online'
-  })
-  .catch(e => {
-    console.error('OpenCV auto-fit error:', e)
-    showToast('Erro no auto-ajuste')
-    ocvUI.status.textContent = 'Erro'
-    ocvUI.status.className = 'opencv-status error'
-  })
-}
-
-ocvUI.analyzeBtn.addEventListener('click', analyzeWithOpenCV)
-ocvUI.autoBtn.addEventListener('click', autoFitOpenCV)
-
-// Auto-connect OpenCV on page load (independent of camera/MediaPipe)
-connectOpenCV()
-
-// ── Test Mode removed ───────────────────────────────────────────────────
