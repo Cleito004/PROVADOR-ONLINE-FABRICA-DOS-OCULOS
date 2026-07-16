@@ -928,6 +928,7 @@ function stopStream() {
 }
 
 async function startApp() {
+  console.log('[DEBUG] startApp called');
   stopStream();
   errorOverlay.classList.add('hidden');
   startPrompt.classList.add('hidden');
@@ -935,13 +936,17 @@ async function startApp() {
   loadingText.textContent = 'Ativando câmera...';
 
   try {
+    console.log('[DEBUG] Requesting camera...');
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }
     });
+    console.log('[DEBUG] Camera stream obtained');
     webcam.srcObject = stream;
     await webcam.play();
+    console.log('[DEBUG] Video playing, dimensions:', webcam.videoWidth, 'x', webcam.videoHeight);
     await new Promise(r => { const c = () => { if (webcam.videoWidth > 0) r(); else requestAnimationFrame(c); }; requestAnimationFrame(c); });
   } catch (e) {
+    console.error('[DEBUG] Camera error:', e.message);
     loadingOverlay.classList.add('hidden');
     startPrompt.classList.remove('hidden');
     showToast('Erro ao acessar a câmera. Verifique as permissões.');
@@ -951,16 +956,20 @@ async function startApp() {
   loadingText.textContent = 'Inicializando cena 3D...';
   await new Promise(r => setTimeout(r, 100));
 
+  console.log('[DEBUG] Initializing scene...');
   await initScene(webcam);
+  console.log('[DEBUG] Scene initialized');
 
   loadingText.textContent = 'Carregando modelo de detecção facial...';
 
   const timeout = new Promise((_, reject) =>
     setTimeout(() => reject(new Error('timeout')), 15000)
   );
+  console.log('[DEBUG] Loading MediaPipe...');
   const load = initMediaPipe();
-  const ok = await Promise.race([load, timeout]).catch(() => false);
+  const ok = await Promise.race([load, timeout]).catch((e) => { console.error('[DEBUG] MediaPipe error:', e.message); return false; });
   if (!ok) {
+    console.error('[DEBUG] MediaPipe failed');
     showError(
       'Falha ao carregar IA',
       'Não foi possível carregar o modelo de detecção facial. ' +
@@ -969,6 +978,7 @@ async function startApp() {
     return;
   }
 
+  console.log('[DEBUG] All ready!');
   loadingText.textContent = 'Pronto!';
   await new Promise(r => setTimeout(r, 200));
   loadingOverlay.classList.add('hidden');
@@ -987,29 +997,30 @@ let opencvProcessor = null;
 
 async function initOpenCV() {
   try {
+    if (typeof cv === 'undefined' || !cv.Mat) {
+      await new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'libs/opencv.js';
+        script.onload = () => {
+          const waitFor = setInterval(() => {
+            if (typeof cv !== 'undefined' && cv.Mat) {
+              clearInterval(waitFor);
+              resolve();
+            }
+          }, 200);
+          setTimeout(() => { clearInterval(waitFor); reject(new Error('OpenCV timeout')); }, 30000);
+        };
+        script.onerror = () => reject(new Error('OpenCV load failed'));
+        document.head.appendChild(script);
+      });
+    }
     const { OpenCVProcessor } = await import('./libs/opencv-processor.js');
     opencvProcessor = new OpenCVProcessor();
-
-    const waitForCv = () => new Promise((resolve) => {
-      if (typeof cv !== 'undefined' && cv.Mat) { resolve(true); return; }
-      let attempts = 0;
-      const check = setInterval(() => {
-        attempts++;
-        if (typeof cv !== 'undefined' && cv.Mat) { clearInterval(check); resolve(true); }
-        else if (attempts > 50) { clearInterval(check); resolve(false); }
-      }, 200);
-    });
-
-    const cvLoaded = await waitForCv();
-    if (cvLoaded) {
-      await opencvProcessor.init();
-      opencvReady = true;
-      console.log('OpenCV browser integration ready');
-    } else {
-      console.warn('OpenCV.js not loaded, running without browser OpenCV');
-    }
+    await opencvProcessor.init();
+    opencvReady = true;
+    console.log('[OK] OpenCV browser integration ready');
   } catch (e) {
-    console.warn('OpenCV init failed:', e.message || e);
+    console.warn('[WARN] OpenCV init failed:', e.message || e);
   }
 }
 
