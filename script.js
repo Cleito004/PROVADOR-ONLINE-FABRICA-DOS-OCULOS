@@ -123,7 +123,26 @@ function isFist(pts) {
   for (let i = 1; i < tips.length; i++) {
     if (pts[tips[i]][1] > pts[mcps[i]][1]) closed++;
   }
-  return closed >= 3;
+  const landmarkFist = closed >= 3;
+
+  if (opencvReady && opencvProcessor && video && video.readyState >= 2) {
+    try {
+      const wrist = pts[HM.wrist];
+      const middleTip = pts[HM.middleTip];
+      const xMin = Math.min(wrist[0], middleTip[0]) / (video.videoWidth || 640);
+      const yMin = Math.min(wrist[1], middleTip[1]) / (video.videoHeight || 480);
+      const xMax = Math.max(wrist[0], middleTip[0]) / (video.videoWidth || 640);
+      const yMax = Math.max(wrist[1], middleTip[1]) / (video.videoHeight || 480);
+      const bbox = { x: xMin, y: yMin, w: xMax - xMin, h: yMax - yMin };
+
+      const contour = opencvProcessor.analyzeHandOpenness(video, bbox);
+      if (contour.isOpen !== null) {
+        return !contour.isOpen;
+      }
+    } catch { /* fallback to landmarks */ }
+  }
+
+  return landmarkFist;
 }
 
 function countFingersHand(pts) {
@@ -960,3 +979,132 @@ async function startApp() {
 
 retryBtn.addEventListener('click', startApp);
 startBtn.addEventListener('click', startApp);
+
+// ── OpenCV Browser Integration ──────────────────────────────────────────
+
+let opencvReady = false;
+let opencvProcessor = null;
+
+async function initOpenCV() {
+  try {
+    const { OpenCVProcessor } = await import('./libs/opencv-processor.js');
+    opencvProcessor = new OpenCVProcessor();
+
+    const waitForCv = () => new Promise((resolve) => {
+      if (typeof cv !== 'undefined' && cv.Mat) { resolve(true); return; }
+      let attempts = 0;
+      const check = setInterval(() => {
+        attempts++;
+        if (typeof cv !== 'undefined' && cv.Mat) { clearInterval(check); resolve(true); }
+        else if (attempts > 100) { clearInterval(check); resolve(false); }
+      }, 200);
+    });
+
+    const cvLoaded = await waitForCv();
+    if (cvLoaded) {
+      await opencvProcessor.init();
+      opencvReady = true;
+      console.log('OpenCV browser integration ready');
+    } else {
+      console.warn('OpenCV.js not available, running without browser OpenCV');
+    }
+  } catch (e) {
+    console.warn('OpenCV init failed:', e);
+  }
+}
+
+initOpenCV();
+
+// ── Python Backend WebSocket Client ─────────────────────────────────────
+
+const BACKEND_WS_URL = 'ws://localhost:5050/ws';
+let backendWs = null;
+let backendConnected = false;
+let backendReconnectTimer = null;
+
+function connectBackend() {
+  if (backendWs && backendWs.readyState <= 1) return;
+
+  try {
+    backendWs = new WebSocket(BACKEND_WS_URL);
+
+    backendWs.onopen = () => {
+      backendConnected = true;
+      console.log('Python backend connected');
+    };
+
+    backendWs.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        handleBackendMessage(msg);
+      } catch { /* ignore */ }
+    };
+
+    backendWs.onclose = () => {
+      backendConnected = false;
+      backendReconnectTimer = setTimeout(connectBackend, 5000);
+    };
+
+    backendWs.onerror = () => {
+      if (backendWs) backendWs.close();
+    };
+  } catch {
+    backendReconnectTimer = setTimeout(connectBackend, 5000);
+  }
+}
+
+function handleBackendMessage(msg) {
+  if (msg.type === 'frame-result' && msg.hand) {
+    const hand = msg.hand;
+    if (hand.detected && hand.isOpen !== null) {
+      const strip = document.getElementById('color-strip');
+      if (hand.isOpen) {
+        if (strip && !strip.classList.contains('active')) {
+          strip.classList.add('active');
+        }
+      } else {
+        if (strip && strip.classList.contains('active') && !gestureState.rightHandFist) {
+          strip.classList.remove('active');
+        }
+      }
+    }
+  }
+}
+
+function sendFrameToBackend() {
+  if (!backendConnected || !backendWs || !video || !isActive) return;
+
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.min(video.videoWidth || 640, 320);
+    canvas.height = Math.min(video.videoHeight || 480, 240);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
+
+    backendWs.send(JSON.stringify({
+      type: 'frame',
+      image: dataUrl,
+      frame: frame_counter++,
+    }));
+  } catch { /* ignore */ }
+}
+
+let frame_counter = 0;
+let backendFrameTimer = null;
+
+function startBackendFrameStream() {
+  if (backendFrameTimer) return;
+  backendFrameTimer = setInterval(sendFrameToBackend, 100);
+}
+
+connectBackend();
+
+// Start backend frame streaming when camera starts
+const origStartAppFn = startApp;
+startApp = async function() {
+  await origStartAppFn.call(this);
+  if (isActive) {
+    startBackendFrameStream();
+  }
+};
