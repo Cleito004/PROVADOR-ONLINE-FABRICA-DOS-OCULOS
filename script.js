@@ -797,7 +797,7 @@ function runPrediction() {
 
           if (leftHandPts) {
             const leftHandX = handXNormalized(leftHandPts);
-            if (leftHandX < 0.5) {
+            if (leftHandX >= 0.5) {
               const leftFingers = countFingersHand(leftHandPts);
               const lensIdx = Math.min(leftFingers, LENS_COLORS.length - 1);
               if (lensIdx !== smooth.lastLensIdx) {
@@ -820,7 +820,7 @@ function runPrediction() {
             const fist = isFist(rightHandPts);
             const openFingers = countFingersHand(rightHandPts);
 
-            if (fist && rightHandX >= 0.5) {
+            if (fist && rightHandX < 0.5) {
               if (!gestureState.rightHandFist) {
                 gestureState.rightHandFist = true;
                 gestureState.fistActiveX = handXNormalized(rightHandPts);
@@ -828,7 +828,7 @@ function runPrediction() {
                 if (strip) strip.classList.add('active');
               }
               const handX = handXNormalized(rightHandPts);
-              const sensitiveX = clamp((handX - 0.5) * 2, 0, 1);
+              const sensitiveX = clamp(1 - handX * 2, 0, 1);
 
               const fc = frameColorFromPosition(sensitiveX);
               currentColor = fc.hex;
@@ -848,7 +848,7 @@ function runPrediction() {
                 if (strip) strip.classList.remove('active');
               }
 
-              if (openFingers >= 1 && openFingers <= 3 && rightHandX >= 0.5) {
+              if (openFingers >= 1 && openFingers <= 3 && rightHandX < 0.5) {
                 const styleIdx = Math.min(openFingers - 1, STYLES.length - 1);
                 const newStyle = STYLES[styleIdx];
                 if (newStyle !== currentStyle) {
