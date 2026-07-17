@@ -886,7 +886,9 @@ const scanStatus = document.getElementById('scan-status');
 document.querySelectorAll('#adjustment-panel input[type="range"]').forEach(slider => {
   slider.addEventListener('input', () => {
     const d = document.getElementById('adj-distance');
+    const v = document.getElementById('adj-distance-value');
     if (d) adjDistance = parseFloat(d.value);
+    if (v) v.textContent = d ? d.value : '0';
   });
 });
 

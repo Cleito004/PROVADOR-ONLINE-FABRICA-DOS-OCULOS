@@ -240,6 +240,13 @@ main {
   min-width: 55px;
   text-align: right;
 }
+.adj-value {
+  font-size: 11px;
+  color: var(--text);
+  min-width: 35px;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
 .adj-row input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
