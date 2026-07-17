@@ -668,10 +668,13 @@ function runPrediction() {
       const noseZDelta = smooth.scanCompleted ? (nose.z - smooth.refNoseZ) : 0;
       const depAdj = clamp(noseTipZ * 0.06 - noseZDelta * 0.04, -1, 3);
 
+      const maxOffset = fW * 1.5;
+      const distScale = Math.abs(adjDistance) > maxOffset ? maxOffset / Math.abs(adjDistance) : 1;
+
       const tPos = nose.clone()
         .addScaledVector(xAxis, sc.centerX + adjLateral)
         .addScaledVector(yAxis, sc.down + adjHeight)
-        .addScaledVector(zAxis, CFG.glassesDepth + depAdj + adjDistance);
+        .addScaledVector(zAxis, CFG.glassesDepth + depAdj + adjDistance * distScale);
 
       const tScaleVal = bS * CFG.glassesScale * (1 + adjDistance * 0.001);
       const tScale = new THREE.Vector3(tScaleVal, tScaleVal, tScaleVal);
