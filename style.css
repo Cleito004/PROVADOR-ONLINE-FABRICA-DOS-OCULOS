@@ -213,6 +213,52 @@ main {
   pointer-events: none;
 }
 
+/* ── Sliders de ajuste ──────────────────────────── */
+#adjustment-panel {
+  position: absolute;
+  left: 16px;
+  bottom: 100px;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(8px);
+  padding: 12px 16px;
+  border-radius: 10px;
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 160px;
+}
+
+.adj-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.adj-row label {
+  font-size: 11px;
+  color: var(--text-dim);
+  min-width: 55px;
+  text-align: right;
+}
+.adj-row input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  height: 3px;
+  background: var(--surface2);
+  border-radius: 2px;
+  outline: none;
+}
+.adj-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--primary);
+  cursor: pointer;
+  border: none;
+}
+
 /* ── Hand gesture status ──────────────────────────── */
 #hand-gesture-status {
   position: absolute;

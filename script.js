@@ -104,7 +104,7 @@ const gestureState = {
 const adjHeight = 0;
 const adjRotation = 0;
 const adjLateral = 0;
-const adjDistance = 0;
+let adjDistance = 0;
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 function qDelta(a, b) { return 2 * Math.acos(clamp(Math.abs(a.dot(b)), 0, 1)); }
@@ -878,6 +878,13 @@ const scanTitle = document.getElementById('scan-title');
 const scanMessage = document.getElementById('scan-message');
 const scanProgressBar = document.getElementById('scan-progress-bar');
 const scanStatus = document.getElementById('scan-status');
+
+document.querySelectorAll('#adjustment-panel input[type="range"]').forEach(slider => {
+  slider.addEventListener('input', () => {
+    const d = document.getElementById('adj-distance');
+    if (d) adjDistance = parseFloat(d.value);
+  });
+});
 
 function showError(title, msg) {
   loadingOverlay.classList.add('hidden');
