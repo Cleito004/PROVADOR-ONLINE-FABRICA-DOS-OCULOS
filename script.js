@@ -123,26 +123,7 @@ function isFist(pts) {
   for (let i = 1; i < tips.length; i++) {
     if (pts[tips[i]][1] > pts[mcps[i]][1]) closed++;
   }
-  const landmarkFist = closed >= 3;
-
-  if (opencvReady && opencvProcessor && video && video.readyState >= 2) {
-    try {
-      const wrist = pts[HM.wrist];
-      const middleTip = pts[HM.middleTip];
-      const xMin = Math.min(wrist[0], middleTip[0]) / (video.videoWidth || 640);
-      const yMin = Math.min(wrist[1], middleTip[1]) / (video.videoHeight || 480);
-      const xMax = Math.max(wrist[0], middleTip[0]) / (video.videoWidth || 640);
-      const yMax = Math.max(wrist[1], middleTip[1]) / (video.videoHeight || 480);
-      const bbox = { x: xMin, y: yMin, w: xMax - xMin, h: yMax - yMin };
-
-      const contour = opencvProcessor.analyzeHandOpenness(video, bbox);
-      if (contour.isOpen !== null) {
-        return !contour.isOpen;
-      }
-    } catch { /* fallback to landmarks */ }
-  }
-
-  return landmarkFist;
+  return closed >= 3;
 }
 
 function countFingersHand(pts) {
@@ -1007,42 +988,6 @@ window.addEventListener('DOMContentLoaded', () => {
     setTimeout(startApp, 500);
   }
 });
-
-// ── OpenCV Browser Integration ──────────────────────────────────────────
-
-let opencvReady = false;
-let opencvProcessor = null;
-
-async function initOpenCV() {
-  try {
-    if (typeof cv === 'undefined' || !cv.Mat) {
-      await new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = 'libs/opencv.js';
-        script.onload = () => {
-          const waitFor = setInterval(() => {
-            if (typeof cv !== 'undefined' && cv.Mat) {
-              clearInterval(waitFor);
-              resolve();
-            }
-          }, 200);
-          setTimeout(() => { clearInterval(waitFor); reject(new Error('OpenCV timeout')); }, 30000);
-        };
-        script.onerror = () => reject(new Error('OpenCV load failed'));
-        document.head.appendChild(script);
-      });
-    }
-    const { OpenCVProcessor } = await import('./libs/opencv-processor.js');
-    opencvProcessor = new OpenCVProcessor();
-    await opencvProcessor.init();
-    opencvReady = true;
-    console.log('[OK] OpenCV browser integration ready');
-  } catch (e) {
-    console.warn('[WARN] OpenCV init failed:', e.message || e);
-  }
-}
-
-initOpenCV();
 
 // ── Python Backend WebSocket Client ─────────────────────────────────────
 
