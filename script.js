@@ -813,7 +813,7 @@ function runPrediction() {
               }
               const handX = handXNormalized(rightHandPts);
               const deltaX = handX - (gestureState.fistActiveX || 0.5);
-              const sensitiveX = clamp(0.5 + deltaX * 4, 0, 1);
+              const sensitiveX = clamp(0.5 + deltaX * 0.25, 0, 1);
               gestureState.fistActiveX = handX;
 
               const fc = frameColorFromPosition(sensitiveX);
@@ -824,8 +824,6 @@ function runPrediction() {
               const needle = document.getElementById('color-needle');
               if (needle) {
                 needle.style.left = (sensitiveX * 100) + '%';
-                needle.style.backgroundColor = colorAtPosition(sensitiveX);
-                needle.style.boxShadow = `0 0 12px ${colorAtPosition(sensitiveX)}`;
               }
               showGestureStatus(`Armação: cor RGB`);
             } else {
