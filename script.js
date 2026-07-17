@@ -671,10 +671,11 @@ function runPrediction() {
       const maxOffset = fW * 1.5;
       const distScale = Math.abs(adjDistance) > maxOffset ? maxOffset / Math.abs(adjDistance) : 1;
 
+      const zOffset = (CFG.glassesDepth + depAdj + adjDistance * distScale) * bS;
       const tPos = eMid.clone()
         .addScaledVector(xAxis, sc.centerX + adjLateral)
         .addScaledVector(yAxis, adjHeight)
-        .addScaledVector(zAxis, CFG.glassesDepth + depAdj + adjDistance * distScale);
+        .addScaledVector(zAxis, zOffset);
 
       const tScaleVal = bS * CFG.glassesScale * (1 + adjDistance * 0.001);
       const tScale = new THREE.Vector3(tScaleVal, tScaleVal, tScaleVal);
