@@ -101,10 +101,10 @@ const gestureState = {
   frameColorIdx: 5,
 };
 
-let adjHeight = 0;
-let adjRotation = 0;
-let adjLateral = 0;
-let adjDistance = 0;
+const adjHeight = 0;
+const adjRotation = 0;
+const adjLateral = 0;
+const adjDistance = 0;
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 function qDelta(a, b) { return 2 * Math.acos(clamp(Math.abs(a.dot(b)), 0, 1)); }
@@ -239,17 +239,6 @@ function updateNeedleColor(xNorm) {
     needle.style.backgroundColor = colorAtPosition(xNorm);
     needle.style.boxShadow = `0 0 12px ${colorAtPosition(xNorm)}`;
   }
-}
-
-function updateSliders() {
-  const h = document.getElementById('adj-height');
-  const r = document.getElementById('adj-rotation');
-  const l = document.getElementById('adj-lateral');
-  const d = document.getElementById('adj-distance');
-  if (h) adjHeight = parseFloat(h.value);
-  if (r) adjRotation = parseFloat(r.value);
-  if (l) adjLateral = parseFloat(l.value);
-  if (d) adjDistance = parseFloat(d.value);
 }
 
 const MODEL_CACHE = {};
@@ -571,44 +560,67 @@ function makeEnvMap() {
   return tex;
 }
 
+function withTimeout(promise, ms, label) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`Timeout: ${label} (${ms}ms)`)), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
 async function initMediaPipe(delegate) {
   const dl = delegate || 'GPU';
+  const VISION_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.7';
   try {
-    const VISION_CDN = 'https://unpkg.com/@mediapipe/tasks-vision@0.10.7';
     loadingText.textContent = 'Baixando motor de IA...';
-    const vision = await import(`${VISION_CDN}/vision_bundle.mjs`);
+    const vision = await withTimeout(
+      import(`${VISION_CDN}/vision_bundle.mjs`), 15000, 'import vision_bundle'
+    );
+
     loadingText.textContent = 'Compilando WASM...';
-    const fileset = await vision.FilesetResolver.forVisionTasks(`${VISION_CDN}/wasm`);
-    loadingText.textContent = `Baixando modelo facial (${dl})...`;
-    faceLandmarker = await vision.FaceLandmarker.createFromOptions(fileset, {
-      baseOptions: {
-        modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task',
-        delegate: dl
-      },
-      runningMode: 'VIDEO',
-      numFaces: 1,
-      minFaceDetectionConfidence: 0.5,
-      minFacePresenceConfidence: 0.5,
-      minTrackingConfidence: 0.5,
-      outputFaceBlendshapes: false,
-      outputFacialTransformationMatrixes: false
-    });
-    loadingText.textContent = 'Baixando modelo das mãos...';
-    handLandmarker = await vision.HandLandmarker.createFromOptions(fileset, {
-      baseOptions: {
-        modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task',
-        delegate: dl
-      },
-      runningMode: 'VIDEO',
-      numHands: 2,
-      minHandDetectionConfidence: 0.5,
-      minHandPresenceConfidence: 0.5,
-      minTrackingConfidence: 0.5,
-    });
+    const fileset = await withTimeout(
+      vision.FilesetResolver.forVisionTasks(`${VISION_CDN}/wasm`), 15000, 'FilesetResolver'
+    );
+
+    loadingText.textContent = `Carregando modelo facial (${dl})...`;
+    faceLandmarker = await withTimeout(
+      vision.FaceLandmarker.createFromOptions(fileset, {
+        baseOptions: {
+          modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task',
+          delegate: dl
+        },
+        runningMode: 'VIDEO',
+        numFaces: 1,
+        minFaceDetectionConfidence: 0.5,
+        minFacePresenceConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+        outputFaceBlendshapes: false,
+        outputFacialTransformationMatrixes: false
+      }), 20000, 'FaceLandmarker'
+    );
+
+    loadingText.textContent = 'Carregando modelo das mãos...';
+    handLandmarker = await withTimeout(
+      vision.HandLandmarker.createFromOptions(fileset, {
+        baseOptions: {
+          modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task',
+          delegate: dl
+        },
+        runningMode: 'VIDEO',
+        numHands: 2,
+        minHandDetectionConfidence: 0.5,
+        minHandPresenceConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+      }), 20000, 'HandLandmarker'
+    );
+
     return true;
   } catch (e) {
+    console.warn(`MediaPipe ${dl} falhou:`, e.message || e);
     if (dl === 'GPU') {
-      console.warn('GPU falhou, tentando CPU:', e);
+      console.log('Tentando fallback para CPU...');
       return initMediaPipe('CPU');
     }
     console.error('Falha ao carregar MediaPipe:', e);
@@ -875,14 +887,11 @@ function runPrediction() {
   schedulePrediction();
 }
 
-const startBtn = document.getElementById('start-btn');
 const loadingOverlay = document.getElementById('loading-overlay');
 const loadingText = document.getElementById('loading-text');
 const errorOverlay = document.getElementById('error-overlay');
 const errorTitle = document.getElementById('error-title');
 const errorMessage = document.getElementById('error-message');
-const retryBtn = document.getElementById('retry-btn');
-const startPrompt = document.getElementById('start-prompt');
 const webcam = document.getElementById('webcam');
 
 const scanOverlay = document.getElementById('scan-overlay');
@@ -890,10 +899,6 @@ const scanTitle = document.getElementById('scan-title');
 const scanMessage = document.getElementById('scan-message');
 const scanProgressBar = document.getElementById('scan-progress-bar');
 const scanStatus = document.getElementById('scan-status');
-
-document.querySelectorAll('#adjustment-panel input[type="range"]').forEach(slider => {
-  slider.addEventListener('input', updateSliders);
-});
 
 function showError(title, msg) {
   loadingOverlay.classList.add('hidden');
@@ -927,11 +932,14 @@ function stopStream() {
   smooth.scanFrames = [];
 }
 
+let autoRetryCount = 0;
+const MAX_AUTO_RETRY = 3;
+let autoStartDone = false;
+
 async function startApp() {
   console.log('[DEBUG] startApp called');
   stopStream();
   errorOverlay.classList.add('hidden');
-  startPrompt.classList.add('hidden');
   loadingOverlay.classList.remove('hidden');
   loadingText.textContent = 'Ativando câmera...';
 
@@ -948,8 +956,13 @@ async function startApp() {
   } catch (e) {
     console.error('[DEBUG] Camera error:', e.message);
     loadingOverlay.classList.add('hidden');
-    startPrompt.classList.remove('hidden');
-    showToast('Erro ao acessar a câmera. Verifique as permissões.');
+    if (autoRetryCount < MAX_AUTO_RETRY) {
+      autoRetryCount++;
+      showToast(`Tentativa ${autoRetryCount}/${MAX_AUTO_RETRY}...`);
+      setTimeout(startApp, 3000);
+    } else {
+      showToast('Câmera indisponível. Verifique as permissões.');
+    }
     return;
   }
 
@@ -962,23 +975,23 @@ async function startApp() {
 
   loadingText.textContent = 'Carregando modelo de detecção facial...';
 
-  const timeout = new Promise((_, reject) =>
-    setTimeout(() => reject(new Error('timeout')), 15000)
-  );
   console.log('[DEBUG] Loading MediaPipe...');
-  const load = initMediaPipe();
-  const ok = await Promise.race([load, timeout]).catch((e) => { console.error('[DEBUG] MediaPipe error:', e.message); return false; });
+  const ok = await initMediaPipe();
   if (!ok) {
     console.error('[DEBUG] MediaPipe failed');
-    showError(
-      'Falha ao carregar IA',
-      'Não foi possível carregar o modelo de detecção facial. ' +
-      'Verifique sua conexão de internet e tente novamente.'
-    );
+    loadingOverlay.classList.add('hidden');
+    if (autoRetryCount < MAX_AUTO_RETRY) {
+      autoRetryCount++;
+      showToast(`Reconectando... (${autoRetryCount}/${MAX_AUTO_RETRY})`);
+      setTimeout(startApp, 3000);
+    } else {
+      showToast('Falha ao carregar IA. Verifique sua conexão.');
+    }
     return;
   }
 
   console.log('[DEBUG] All ready!');
+  autoRetryCount = 0;
   loadingText.textContent = 'Pronto!';
   await new Promise(r => setTimeout(r, 200));
   loadingOverlay.classList.add('hidden');
@@ -987,8 +1000,13 @@ async function startApp() {
   schedulePrediction();
 }
 
-retryBtn.addEventListener('click', startApp);
-startBtn.addEventListener('click', startApp);
+// ── Auto-start ──────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  if (!autoStartDone) {
+    autoStartDone = true;
+    setTimeout(startApp, 500);
+  }
+});
 
 // ── OpenCV Browser Integration ──────────────────────────────────────────
 

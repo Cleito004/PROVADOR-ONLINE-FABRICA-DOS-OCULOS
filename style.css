@@ -117,44 +117,6 @@ main {
 }
 #face-info.hidden { opacity: 0; }
 
-/* Start prompt */
-#start-prompt {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(15,15,26,0.8);
-  z-index: 10;
-  transition: opacity 0.5s;
-}
-#start-prompt.hidden {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.prompt-content { text-align: center; max-width: 360px; padding: 32px; }
-.prompt-icon { font-size: 64px; display: block; margin-bottom: 16px; opacity: 0.6; }
-.prompt-content h2 { font-size: 22px; margin-bottom: 8px; }
-.prompt-content p { color: var(--text-dim); font-size: 14px; margin-bottom: 24px; line-height: 1.6; }
-
-.btn {
-  padding: 10px 28px;
-  border: none;
-  border-radius: var(--radius);
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.btn-primary { background: var(--primary); color: #fff; }
-.btn-primary:hover { background: var(--primary-dark); transform: translateY(-1px); }
-.btn-secondary { background: var(--surface2); color: var(--text); }
-.btn-secondary:hover { background: #35355e; }
-
 /* ── Matriz de estilos 3x1 ──────────────────────────── */
 #style-matrix {
   position: absolute;
@@ -249,52 +211,6 @@ main {
   transition: left 0.05s linear, background-color 0.15s;
   box-shadow: 0 0 8px rgba(255,255,255,0.6);
   pointer-events: none;
-}
-
-/* ── Sliders de ajuste ──────────────────────────── */
-#adjustment-panel {
-  position: absolute;
-  left: 16px;
-  bottom: 140px;
-  background: rgba(0,0,0,0.5);
-  backdrop-filter: blur(8px);
-  padding: 12px 16px;
-  border-radius: 10px;
-  z-index: 8;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 160px;
-}
-
-.adj-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.adj-row label {
-  font-size: 11px;
-  color: var(--text-dim);
-  min-width: 55px;
-  text-align: right;
-}
-.adj-row input[type="range"] {
-  -webkit-appearance: none;
-  appearance: none;
-  flex: 1;
-  height: 3px;
-  background: var(--surface2);
-  border-radius: 2px;
-  outline: none;
-}
-.adj-row input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--primary);
-  cursor: pointer;
-  border: none;
 }
 
 /* ── Hand gesture status ──────────────────────────── */

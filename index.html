@@ -21,7 +21,7 @@
         <span class="error-icon">&#x26A0;&#xFE0F;</span>
         <h2 id="error-title">Algo deu errado</h2>
         <p id="error-message">Não foi possível carregar o modelo de detecção facial.</p>
-        <button id="retry-btn" class="btn btn-primary">Tente Novamente</button>
+
       </div>
     </div>
 
@@ -46,15 +46,6 @@
         <video id="webcam" autoplay playsinline muted></video>
         <div id="face-info"></div>
 
-        <div id="start-prompt">
-          <div class="prompt-content">
-            <span class="prompt-icon">&#x1F4F7;</span>
-            <h2>Ative sua câmera</h2>
-            <p>Posicione seu rosto na frente da câmera para experimentar os óculos virtualmente</p>
-            <button id="start-btn" class="btn btn-primary">Ativar Câmera</button>
-          </div>
-        </div>
-
         <!-- Matriz 3x1 de estilos - centro direito -->
         <div id="style-matrix">
           <div class="style-item active" data-style="square">
@@ -75,26 +66,6 @@
         <div id="color-strip-container">
           <div id="color-strip">
             <div id="color-needle"></div>
-          </div>
-        </div>
-
-        <!-- Sliders de ajuste manual -->
-        <div id="adjustment-panel">
-          <div class="adj-row">
-            <label>Altura</label>
-            <input type="range" id="adj-height" min="-10" max="10" value="0" step="0.5">
-          </div>
-          <div class="adj-row">
-            <label>Rotação</label>
-            <input type="range" id="adj-rotation" min="-15" max="15" value="0" step="0.5">
-          </div>
-          <div class="adj-row">
-            <label>Lateral</label>
-            <input type="range" id="adj-lateral" min="-10" max="10" value="0" step="0.5">
-          </div>
-          <div class="adj-row">
-            <label>Distância</label>
-            <input type="range" id="adj-distance" min="-5" max="5" value="0" step="0.5">
           </div>
         </div>
 
