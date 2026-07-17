@@ -105,7 +105,6 @@ const adjHeight = 0;
 const adjRotation = 0;
 const adjLateral = 0;
 let adjDistance = -150;
-let adjLateralRotation = 80;
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 function qDelta(a, b) { return 2 * Math.acos(clamp(Math.abs(a.dot(b)), 0, 1)); }
@@ -667,8 +666,7 @@ function runPrediction() {
       const bS = wS * 0.7 + hS * 0.3;
 
       const noseTipZ = nTip.z - nose.z;
-      const noseZDelta = smooth.scanCompleted ? (nose.z - smooth.refNoseZ) : 0;
-      const depAdj = clamp(noseTipZ * 0.06 - noseZDelta * 0.04, -1, 3);
+      const depAdj = clamp(noseTipZ * 0.06, -1, 3);
 
       const tPos = nose.clone()
         .addScaledVector(xAxis, sc.centerX + adjLateral)
@@ -676,8 +674,11 @@ function runPrediction() {
         .addScaledVector(zAxis, CFG.glassesDepth + depAdj + adjDistance);
 
       const faceTurn = Math.abs(xEye.z);
-      const rotationPush = faceTurn * adjLateralRotation;
-      tPos.addScaledVector(zAxis, -rotationPush);
+      const cosTheta = Math.sqrt(Math.max(0, 1 - faceTurn * faceTurn));
+      const R = fW * 0.3;
+      const D = Math.abs(CFG.glassesDepth + depAdj + adjDistance);
+      const autoComp = R * faceTurn + D * (1 - cosTheta);
+      tPos.addScaledVector(zAxis, -autoComp);
 
       const foreheadY = fHead.y;
       const maxGlassesY = foreheadY - 5;
@@ -898,10 +899,6 @@ document.querySelectorAll('#adjustment-panel input[type="range"]').forEach(slide
     const v = document.getElementById('adj-distance-value');
     if (d) adjDistance = parseFloat(d.value);
     if (v) v.textContent = d ? d.value : '-150';
-    const lr = document.getElementById('adj-lateral-rotation');
-    const lv = document.getElementById('adj-lateral-rotation-value');
-    if (lr) adjLateralRotation = parseFloat(lr.value);
-    if (lv) lv.textContent = lr ? lr.value : '80';
   });
 });
 });
