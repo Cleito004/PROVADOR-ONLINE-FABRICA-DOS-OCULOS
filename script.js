@@ -672,7 +672,7 @@ function runPrediction() {
       const tPos = nose.clone()
         .addScaledVector(xAxis, sc.centerX + adjLateral)
         .addScaledVector(yAxis, sc.down + adjHeight)
-        .addScaledVector(zAxis, CFG.glassesDepth + depAdj + adjDistance * 20);
+        .addScaledVector(zAxis, CFG.glassesDepth + depAdj + adjDistance);
 
       const tScaleVal = bS * CFG.glassesScale;
       const tScale = new THREE.Vector3(tScaleVal, tScaleVal, tScaleVal);
