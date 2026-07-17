@@ -104,7 +104,7 @@ const gestureState = {
 const adjHeight = 0;
 const adjRotation = 0;
 const adjLateral = 0;
-let adjDistance = 0;
+let adjDistance = 150;
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 function qDelta(a, b) { return 2 * Math.acos(clamp(Math.abs(a.dot(b)), 0, 1)); }
