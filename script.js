@@ -666,7 +666,8 @@ function runPrediction() {
       const bS = wS * 0.7 + hS * 0.3;
 
       const noseTipZ = nTip.z - nose.z;
-      const depAdj = clamp(noseTipZ * 0.06, -1, 3);
+      const noseZDelta = smooth.scanCompleted ? (nose.z - smooth.refNoseZ) : 0;
+      const depAdj = clamp(noseTipZ * 0.06 - noseZDelta * 0.04, -1, 3);
 
       const tPos = nose.clone()
         .addScaledVector(xAxis, sc.centerX + adjLateral)
