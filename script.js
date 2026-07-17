@@ -1009,7 +1009,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
 // ── Python Backend WebSocket Client ─────────────────────────────────────
 
-const BACKEND_WS_URL = 'ws://localhost:5050/ws';
+const BACKEND_WS_URL = 'ws://localhost:8080/ws';
 let backendWs = null;
 let backendConnected = false;
 let backendReconnectTimer = null;
