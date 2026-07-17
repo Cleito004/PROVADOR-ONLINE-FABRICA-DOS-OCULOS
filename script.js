@@ -653,11 +653,10 @@ function runPrediction() {
       const fW = Math.max(eW, tW, cW);
       const fH = fHead.distanceTo(chn);
 
-      const xEye = lEye.clone().sub(rEye).normalize();
       const yRaw = fHead.clone().sub(chn).normalize();
-      const xEyeN = xEye;
       const yAxis = yRaw;
-      let zAxis = xEyeN.clone().cross(yAxis).normalize();
+      const xRaw = lTmp.clone().sub(rTmp).normalize();
+      let zAxis = xRaw.clone().cross(yAxis).normalize();
       if (zAxis.dot(nTip.clone().sub(nose).normalize()) < 0) zAxis.negate();
       const xAxis = yAxis.clone().cross(zAxis).normalize();
 
