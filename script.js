@@ -104,7 +104,8 @@ const gestureState = {
 const adjHeight = 0;
 const adjRotation = 0;
 const adjLateral = 0;
-let adjDistance = 150;
+let adjDistance = -150;
+let adjLateralRotation = 80;
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 function qDelta(a, b) { return 2 * Math.acos(clamp(Math.abs(a.dot(b)), 0, 1)); }
@@ -674,6 +675,14 @@ function runPrediction() {
         .addScaledVector(yAxis, sc.down + adjHeight)
         .addScaledVector(zAxis, CFG.glassesDepth + depAdj + adjDistance);
 
+      const faceTurn = Math.abs(xEye.z);
+      const rotationPush = faceTurn * adjLateralRotation;
+      tPos.addScaledVector(zAxis, -rotationPush);
+
+      const foreheadY = fHead.y;
+      const maxGlassesY = foreheadY - 5;
+      if (tPos.y > maxGlassesY) tPos.y = maxGlassesY;
+
       const tScaleVal = bS * CFG.glassesScale;
       const tScale = new THREE.Vector3(tScaleVal, tScaleVal, tScaleVal);
 
@@ -888,8 +897,13 @@ document.querySelectorAll('#adjustment-panel input[type="range"]').forEach(slide
     const d = document.getElementById('adj-distance');
     const v = document.getElementById('adj-distance-value');
     if (d) adjDistance = parseFloat(d.value);
-    if (v) v.textContent = d ? d.value : '0';
+    if (v) v.textContent = d ? d.value : '-150';
+    const lr = document.getElementById('adj-lateral-rotation');
+    const lv = document.getElementById('adj-lateral-rotation-value');
+    if (lr) adjLateralRotation = parseFloat(lr.value);
+    if (lv) lv.textContent = lr ? lr.value : '80';
   });
+});
 });
 
 function showError(title, msg) {
