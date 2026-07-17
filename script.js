@@ -673,7 +673,7 @@ function runPrediction() {
         .addScaledVector(yAxis, sc.down + adjHeight)
         .addScaledVector(zAxis, CFG.glassesDepth + depAdj + adjDistance);
 
-      const tScaleVal = bS * CFG.glassesScale;
+      const tScaleVal = bS * CFG.glassesScale * (1 + adjDistance * 0.001);
       const tScale = new THREE.Vector3(tScaleVal, tScaleVal, tScaleVal);
 
       let rotMat = new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis);
