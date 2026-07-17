@@ -101,7 +101,7 @@ const gestureState = {
   frameColorIdx: 5,
 };
 
-const adjHeight = 0;
+let adjHeight = 0;
 const adjRotation = 0;
 const adjLateral = 0;
 let adjDistance = -150;
@@ -888,9 +888,13 @@ const scanStatus = document.getElementById('scan-status');
 document.querySelectorAll('#adjustment-panel input[type="range"]').forEach(slider => {
   slider.addEventListener('input', () => {
     const d = document.getElementById('adj-distance');
-    const v = document.getElementById('adj-distance-value');
+    const dv = document.getElementById('adj-distance-value');
     if (d) adjDistance = parseFloat(d.value);
-    if (v) v.textContent = d ? d.value : '-150';
+    if (dv) dv.textContent = d ? d.value : '-150';
+    const h = document.getElementById('adj-height');
+    const hv = document.getElementById('adj-height-value');
+    if (h) adjHeight = parseFloat(h.value);
+    if (hv) hv.textContent = h ? h.value : '0';
   });
 });
 
