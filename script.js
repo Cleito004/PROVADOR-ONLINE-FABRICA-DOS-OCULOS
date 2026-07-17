@@ -786,25 +786,31 @@ function runPrediction() {
           }
 
           if (leftHandPts) {
-            const leftFingers = countFingersHand(leftHandPts);
-            const lensIdx = Math.min(leftFingers, LENS_COLORS.length - 1);
-            if (lensIdx !== smooth.lastLensIdx) {
-              smooth.lastLensIdx = lensIdx;
-              currentLensColor = LENS_COLORS[lensIdx].color;
-              currentLensOpacity = LENS_COLORS[lensIdx].opacity;
-              rebuildGlasses();
-              showToast(`Lente: ${LENS_COLORS[lensIdx].name}`);
+            const leftHandX = handXNormalized(leftHandPts);
+            if (leftHandX < 0.5) {
+              const leftFingers = countFingersHand(leftHandPts);
+              const lensIdx = Math.min(leftFingers, LENS_COLORS.length - 1);
+              if (lensIdx !== smooth.lastLensIdx) {
+                smooth.lastLensIdx = lensIdx;
+                currentLensColor = LENS_COLORS[lensIdx].color;
+                currentLensOpacity = LENS_COLORS[lensIdx].opacity;
+                rebuildGlasses();
+                showToast(`Lente: ${LENS_COLORS[lensIdx].name}`);
+              }
+              gestureState.leftHandFingers = leftFingers;
+            } else {
+              gestureState.leftHandFingers = 0;
             }
-            gestureState.leftHandFingers = leftFingers;
           } else {
             gestureState.leftHandFingers = 0;
           }
 
           if (rightHandPts) {
+            const rightHandX = handXNormalized(rightHandPts);
             const fist = isFist(rightHandPts);
             const openFingers = countFingersHand(rightHandPts);
 
-            if (fist) {
+            if (fist && rightHandX >= 0.5) {
               if (!gestureState.rightHandFist) {
                 gestureState.rightHandFist = true;
                 gestureState.fistActiveX = handXNormalized(rightHandPts);
@@ -812,7 +818,7 @@ function runPrediction() {
                 if (strip) strip.classList.add('active');
               }
               const handX = handXNormalized(rightHandPts);
-              const sensitiveX = clamp(0.5 + (handX - 0.5) * 4, 0, 1);
+              const sensitiveX = clamp((handX - 0.5) * 2, 0, 1);
 
               const fc = frameColorFromPosition(sensitiveX);
               currentColor = fc.hex;
@@ -832,7 +838,7 @@ function runPrediction() {
                 if (strip) strip.classList.remove('active');
               }
 
-              if (openFingers >= 1 && openFingers <= 3) {
+              if (openFingers >= 1 && openFingers <= 3 && rightHandX >= 0.5) {
                 const styleIdx = Math.min(openFingers - 1, STYLES.length - 1);
                 const newStyle = STYLES[styleIdx];
                 if (newStyle !== currentStyle) {
