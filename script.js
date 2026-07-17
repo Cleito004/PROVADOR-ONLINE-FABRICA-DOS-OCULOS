@@ -674,17 +674,6 @@ function runPrediction() {
         .addScaledVector(yAxis, sc.down + adjHeight)
         .addScaledVector(zAxis, CFG.glassesDepth + depAdj + adjDistance);
 
-      const faceTurn = Math.abs(xEye.z);
-      const cosTheta = Math.sqrt(Math.max(0, 1 - faceTurn * faceTurn));
-      const R = fW * 0.3;
-      const D = Math.abs(CFG.glassesDepth + depAdj + adjDistance);
-      const autoComp = R * faceTurn + D * (1 - cosTheta);
-      tPos.addScaledVector(zAxis, -autoComp);
-
-      const foreheadY = fHead.y;
-      const maxGlassesY = foreheadY - 5;
-      if (tPos.y > maxGlassesY) tPos.y = maxGlassesY;
-
       const tScaleVal = bS * CFG.glassesScale;
       const tScale = new THREE.Vector3(tScaleVal, tScaleVal, tScaleVal);
 
