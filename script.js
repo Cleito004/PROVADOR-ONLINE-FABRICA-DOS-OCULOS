@@ -901,7 +901,6 @@ document.querySelectorAll('#adjustment-panel input[type="range"]').forEach(slide
     if (v) v.textContent = d ? d.value : '-150';
   });
 });
-});
 
 function showError(title, msg) {
   loadingOverlay.classList.add('hidden');
