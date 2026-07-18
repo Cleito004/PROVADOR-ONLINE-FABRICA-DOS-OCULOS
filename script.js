@@ -760,10 +760,13 @@ function runPrediction() {
       if (absYaw > fadeStart && frameMats.length) {
         const t = clamp((absYaw - fadeStart) / (fadeEnd - fadeStart), 0, 1);
         const templeLen = glassesGroup.userData?.templeLen || 20;
-        const clipOffset = (templeLen + 10) * (1 - t);
-        const clipPoint = smooth.pos.clone().addScaledVector(zAxis, -clipOffset);
+        const halfW = glassesGroup.userData?.halfW || 30;
+        const clipSign = yaw > 0 ? 1 : -1;
+        const clipNormal = new THREE.Vector3(clipSign, 0, -1).normalize();
+        const planeOff = halfW + templeLen * (1 - t) - halfW * t * 0.3;
+        const clipPt = new THREE.Vector3(clipSign * planeOff, 0, 0);
         const clipPlane = new THREE.Plane();
-        clipPlane.setFromNormalAndCoplanarPoint(zAxis, clipPoint);
+        clipPlane.setFromNormalAndCoplanarPoint(clipNormal, clipPt);
         frameMats.forEach(mat => { mat.clippingPlanes = [clipPlane]; });
       } else {
         frameMats.forEach(mat => { mat.clippingPlanes = []; });
