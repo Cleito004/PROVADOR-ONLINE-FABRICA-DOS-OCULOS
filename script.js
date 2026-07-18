@@ -357,6 +357,11 @@ function buildFromModel(style, frameColor, lensColor, lensOpacity) {
 
   meshes.forEach(m => { m.renderOrder = 1; m.depthTest = true; m.scale.z = 1.25; });
 
+  const frameMats = [];
+  clone.traverse(c => {
+    if (c.isMesh && !c.userData.isLens) frameMats.push(c.material);
+  });
+
   const box = new THREE.Box3().setFromObject(clone);
   const center = new THREE.Vector3();
   box.getCenter(center);
@@ -374,6 +379,11 @@ function buildFromModel(style, frameColor, lensColor, lensOpacity) {
   const wrapper = new THREE.Group();
   wrapper.frustumCulled = false;
   wrapper.renderOrder = 1;
+  wrapper.userData.frameMaterials = frameMats;
+  const bSize = new THREE.Vector3();
+  box.getSize(bSize);
+  wrapper.userData.templeLen = bSize.z * 0.5;
+  wrapper.userData.halfW = bSize.x * 0.5;
   wrapper.add(normGroup);
   return wrapper;
 }
@@ -413,6 +423,7 @@ async function initScene(videoEl) {
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(vw, vh);
+  renderer.localClippingEnabled = true;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.1;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -740,8 +751,28 @@ function runPrediction() {
       glassesGroup.scale.copy(smooth.scale);
       if (!glassesGroup.visible) glassesGroup.visible = true;
       glassesGroup.updateWorldMatrix(true, true);
+
+      const yaw = Math.atan2(zAxis.x, zAxis.z);
+      const absYaw = Math.abs(yaw);
+      const fadeStart = 0.35;
+      const fadeEnd = 0.7;
+      const frameMats = glassesGroup.userData?.frameMaterials || [];
+      if (absYaw > fadeStart && frameMats.length) {
+        const t = clamp((absYaw - fadeStart) / (fadeEnd - fadeStart), 0, 1);
+        const templeLen = glassesGroup.userData?.templeLen || 20;
+        const clipOffset = (templeLen + 10) * (1 - t);
+        const clipPoint = smooth.pos.clone().addScaledVector(zAxis, -clipOffset);
+        const clipPlane = new THREE.Plane();
+        clipPlane.setFromNormalAndCoplanarPoint(zAxis, clipPoint);
+        frameMats.forEach(mat => { mat.clippingPlanes = [clipPlane]; });
+      } else {
+        frameMats.forEach(mat => { mat.clippingPlanes = []; });
+      }
     } else {
       if (glassesGroup) glassesGroup.visible = false;
+      if (glassesGroup?.userData?.frameMaterials) {
+        glassesGroup.userData.frameMaterials.forEach(mat => { mat.clippingPlanes = []; });
+      }
       smooth.readyPos = false;
       smooth.readyRot = false;
       smooth.scanning = false;
