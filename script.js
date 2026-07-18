@@ -821,7 +821,7 @@ function runPrediction() {
                 if (strip) strip.classList.add('active');
               }
               const handX = handXNormalized(rightHandPts);
-              const sensitiveX = clamp(1 - handX * 2, 0, 1);
+              const sensitiveX = clamp((0.47 - handX) / 0.38, 0, 1);
 
               const fc = frameColorFromPosition(sensitiveX);
               currentColor = fc.hex;
