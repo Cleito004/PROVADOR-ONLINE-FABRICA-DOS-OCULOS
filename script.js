@@ -101,7 +101,7 @@ const gestureState = {
   frameColorIdx: 5,
 };
 
-let adjHeight = 0;
+let adjHeight = -10;
 const adjRotation = 0;
 const adjLateral = 0;
 let adjDistance = -150;
@@ -326,6 +326,7 @@ function buildFromModel(style, frameColor, lensColor, lensOpacity) {
       }
     }
     c.material = isLens ? lensMat : frameMat;
+    c.userData.isLens = isLens;
     if (isLens) lensCount++;
     else { frameCount++; frameMeshes.add(c); }
   });
@@ -762,8 +763,8 @@ function runPrediction() {
         const templeLen = glassesGroup.userData?.templeLen || 20;
         const halfW = glassesGroup.userData?.halfW || 30;
         const clipSign = yaw > 0 ? 1 : -1;
-        const clipNormal = new THREE.Vector3(clipSign, 0, -1).normalize();
-        const planeOff = halfW + templeLen * (1 - t) - halfW * t * 0.3;
+        const clipNormal = new THREE.Vector3(clipSign, 0, 1).normalize();
+        const planeOff = t * halfW;
         const clipPt = new THREE.Vector3(clipSign * planeOff, 0, 0);
         const clipPlane = new THREE.Plane();
         clipPlane.setFromNormalAndCoplanarPoint(clipNormal, clipPt);
