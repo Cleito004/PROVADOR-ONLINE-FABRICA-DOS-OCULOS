@@ -99,6 +99,8 @@ const gestureState = {
   rightHandX: 0.5,
   fistActiveX: null,
   frameColorIdx: 5,
+  lastModelSwitchTime: 0,
+  lastLensSwitchTime: 0,
 };
 
 let adjHeight = -10;
@@ -132,6 +134,16 @@ function countFingersHand(pts) {
   const isRightHand = pts[HM.indexMCP][0] > pts[HM.pinkyMCP][0];
   if (isRightHand) { if (pts[HM.thumbTip][0] < pts[HM.thumbIP][0]) count++; }
   else { if (pts[HM.thumbTip][0] > pts[HM.thumbIP][0]) count++; }
+  if (pts[HM.indexTip][1] < pts[HM.indexPIP][1]) count++;
+  if (pts[HM.middleTip][1] < pts[HM.middlePIP][1]) count++;
+  if (pts[HM.ringTip][1] < pts[HM.ringPIP][1]) count++;
+  if (pts[HM.pinkyTip][1] < pts[HM.pinkyPIP][1]) count++;
+  return count;
+}
+
+function countOpenFingers(pts) {
+  if (!pts || pts.length < 21) return 0;
+  let count = 0;
   if (pts[HM.indexTip][1] < pts[HM.indexPIP][1]) count++;
   if (pts[HM.middleTip][1] < pts[HM.middlePIP][1]) count++;
   if (pts[HM.ringTip][1] < pts[HM.ringPIP][1]) count++;
@@ -284,6 +296,72 @@ async function loadAllModels() {
   }));
 }
 
+function splitFrameMesh(mesh, frameMat, leftMat, rightMat, modelHalfW) {
+  const geo = mesh.geometry;
+  const posAttr = geo.getAttribute('position');
+  const normAttr = geo.getAttribute('normal');
+  const uvAttr = geo.getAttribute('uv');
+  const idx = geo.getIndex();
+  if (!posAttr || !idx || idx.count < 3) return null;
+
+  const splitX = modelHalfW * 0.45;
+  const leftTris = [], frameTris = [], rightTris = [];
+  for (let i = 0; i < idx.count; i += 3) {
+    const a = idx.getX(i), b = idx.getX(i + 1), c = idx.getX(i + 2);
+    const avgX = (posAttr.getX(a) + posAttr.getX(b) + posAttr.getX(c)) / 3;
+    if (avgX < -splitX) leftTris.push(a, b, c);
+    else if (avgX > splitX) rightTris.push(a, b, c);
+    else frameTris.push(a, b, c);
+  }
+  if (leftTris.length === 0 || rightTris.length === 0 || frameTris.length === 0) return null;
+
+  const IndexArr = idx.count > 65535 ? Uint32Array : Uint16Array;
+
+  function buildRegion(tris) {
+    const unique = [...new Set(tris)];
+    const remap = new Map();
+    unique.forEach((old, i) => remap.set(old, i));
+    const p = new Float32Array(unique.length * 3);
+    const n = normAttr ? new Float32Array(unique.length * 3) : null;
+    const u = uvAttr ? new Float32Array(unique.length * 2) : null;
+    unique.forEach((oi, ni) => {
+      p[ni * 3] = posAttr.getX(oi); p[ni * 3 + 1] = posAttr.getY(oi); p[ni * 3 + 2] = posAttr.getZ(oi);
+      if (n) { n[ni * 3] = normAttr.getX(oi); n[ni * 3 + 1] = normAttr.getY(oi); n[ni * 3 + 2] = normAttr.getZ(oi); }
+      if (u) { u[ni * 2] = uvAttr.getX(oi); u[ni * 2 + 1] = uvAttr.getY(oi); }
+    });
+    const ix = new IndexArr(tris.length);
+    tris.forEach((oi, i) => ix[i] = remap.get(oi));
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(p, 3));
+    if (n) g.setAttribute('normal', new THREE.BufferAttribute(n, 3));
+    if (u) g.setAttribute('uv', new THREE.BufferAttribute(u, 2));
+    g.setIndex(new THREE.BufferAttribute(ix, 1));
+    return g;
+  }
+
+  const leftGeo = buildRegion(leftTris);
+  const frameGeo = buildRegion(frameTris);
+  const rightGeo = buildRegion(rightTris);
+
+  const meshes = [
+    { geo: leftGeo, mat: leftMat, name: 'leftTemple' },
+    { geo: frameGeo, mat: frameMat, name: 'frameCenter' },
+    { geo: rightGeo, mat: rightMat, name: 'rightTemple' },
+  ].map(({ geo: g, mat: m, name: n }) => {
+    const ms = new THREE.Mesh(g, m);
+    ms.position.copy(mesh.position);
+    ms.quaternion.copy(mesh.quaternion);
+    ms.scale.copy(mesh.scale);
+    ms.frustumCulled = false;
+    ms.renderOrder = 1;
+    ms.name = n;
+    ms.userData.isLens = false;
+    return ms;
+  });
+
+  return { leftMesh: meshes[0], frameMesh: meshes[1], rightMesh: meshes[2] };
+}
+
 function buildFromModel(style, frameColor, lensColor, lensOpacity) {
   const entry = MODEL_CACHE[style];
   if (!entry || !entry.scene) return new THREE.Group();
@@ -291,6 +369,12 @@ function buildFromModel(style, frameColor, lensColor, lensOpacity) {
   const normFactor = entry.normFactor || 1;
 
   const frameMat = new THREE.MeshStandardMaterial({
+    color: frameColor, metalness: 0.0, roughness: 1.0, side: THREE.DoubleSide,
+  });
+  const leftTempleMat = new THREE.MeshStandardMaterial({
+    color: frameColor, metalness: 0.0, roughness: 1.0, side: THREE.DoubleSide,
+  });
+  const rightTempleMat = new THREE.MeshStandardMaterial({
     color: frameColor, metalness: 0.0, roughness: 1.0, side: THREE.DoubleSide,
   });
   const lensMat = new THREE.MeshPhysicalMaterial({
@@ -358,9 +442,32 @@ function buildFromModel(style, frameColor, lensColor, lensOpacity) {
 
   meshes.forEach(m => { m.renderOrder = 1; m.depthTest = true; m.scale.z = 1.25; });
 
+  let bestFrameMesh = null, bestXRange = 0;
+  frameMeshes.forEach(m => {
+    const b = new THREE.Box3().setFromObject(m);
+    const xR = b.max.x - b.min.x;
+    if (xR > bestXRange) { bestXRange = xR; bestFrameMesh = m; }
+  });
+  const modelBox = new THREE.Box3().setFromObject(clone);
+  const modelHalfW = (modelBox.max.x - modelBox.min.x) * 0.5;
+
+  if (bestFrameMesh && bestXRange > modelHalfW * 1.2) {
+    const split = splitFrameMesh(bestFrameMesh, frameMat, leftTempleMat, rightTempleMat, modelHalfW);
+    if (split) {
+      const parent = bestFrameMesh.parent;
+      parent.remove(bestFrameMesh);
+      parent.add(split.leftMesh);
+      parent.add(split.frameMesh);
+      parent.add(split.rightMesh);
+      frameMeshes.delete(bestFrameMesh);
+      frameMeshes.add(split.frameMesh);
+    }
+  }
+
   const frameMats = [];
   clone.traverse(c => {
-    if (c.isMesh && !c.userData.isLens) frameMats.push(c.material);
+    if (c.isMesh && !c.userData.isLens && c.name !== 'leftTemple' && c.name !== 'rightTemple')
+      frameMats.push(c.material);
   });
 
   const box = new THREE.Box3().setFromObject(clone);
@@ -381,6 +488,9 @@ function buildFromModel(style, frameColor, lensColor, lensOpacity) {
   wrapper.frustumCulled = false;
   wrapper.renderOrder = 1;
   wrapper.userData.frameMaterials = frameMats;
+  wrapper.userData.frameMat = frameMat;
+  wrapper.userData.leftTempleMat = leftTempleMat;
+  wrapper.userData.rightTempleMat = rightTempleMat;
   const bSize = new THREE.Vector3();
   box.getSize(bSize);
   wrapper.userData.templeLen = bSize.z * 0.5;
@@ -757,26 +867,37 @@ function runPrediction() {
       const absYaw = Math.abs(yaw);
       const fadeStart = 0.35;
       const fadeEnd = 0.7;
-      const frameMats = glassesGroup.userData?.frameMaterials || [];
-      if (absYaw > fadeStart && frameMats.length) {
+      const ud = glassesGroup.userData || {};
+      const leftMat = ud.leftTempleMat;
+      const rightMat = ud.rightTempleMat;
+      const fMat = ud.frameMat;
+
+      if (absYaw > fadeStart && leftMat && rightMat && fMat) {
         const t = clamp((absYaw - fadeStart) / (fadeEnd - fadeStart), 0, 1);
-        const templeLen = glassesGroup.userData?.templeLen || 20;
-        const halfW = glassesGroup.userData?.halfW || 30;
-        const clipSign = yaw > 0 ? 1 : -1;
-        const clipNormal = new THREE.Vector3(clipSign, 0, 1).normalize();
-        const planeOff = t * halfW;
-        const clipPt = new THREE.Vector3(clipSign * planeOff, 0, 0);
+        const halfW = ud.halfW || 30;
+        const sign = yaw > 0 ? 1 : -1;
+        const farMat = sign > 0 ? leftMat : rightMat;
+        const planeOff = sign * (-halfW + t * halfW * 1.1);
         const clipPlane = new THREE.Plane();
-        clipPlane.setFromNormalAndCoplanarPoint(clipNormal, clipPt);
-        frameMats.forEach(mat => { mat.clippingPlanes = [clipPlane]; });
+        clipPlane.setFromNormalAndCoplanarPoint(
+          new THREE.Vector3(sign, 0, 0),
+          new THREE.Vector3(planeOff, 0, 0)
+        );
+        farMat.clippingPlanes = [clipPlane];
+        fMat.clippingPlanes = [];
+        const nearMat = sign > 0 ? rightMat : leftMat;
+        nearMat.clippingPlanes = [];
       } else {
-        frameMats.forEach(mat => { mat.clippingPlanes = []; });
+        if (leftMat) leftMat.clippingPlanes = [];
+        if (rightMat) rightMat.clippingPlanes = [];
+        if (fMat) fMat.clippingPlanes = [];
       }
     } else {
       if (glassesGroup) glassesGroup.visible = false;
-      if (glassesGroup?.userData?.frameMaterials) {
-        glassesGroup.userData.frameMaterials.forEach(mat => { mat.clippingPlanes = []; });
-      }
+      const ud2 = glassesGroup?.userData;
+      if (ud2?.leftTempleMat) ud2.leftTempleMat.clippingPlanes = [];
+      if (ud2?.rightTempleMat) ud2.rightTempleMat.clippingPlanes = [];
+      if (ud2?.frameMat) ud2.frameMat.clippingPlanes = [];
       smooth.readyPos = false;
       smooth.readyRot = false;
       smooth.scanning = false;
@@ -826,14 +947,18 @@ function runPrediction() {
           if (leftHandPts) {
             const leftHandX = handXNormalized(leftHandPts);
             if (leftHandX >= 0.5) {
-              const leftFingers = countFingersHand(leftHandPts);
+              const leftFingers = countOpenFingers(leftHandPts);
               const lensIdx = Math.min(leftFingers, LENS_COLORS.length - 1);
               if (lensIdx !== smooth.lastLensIdx) {
-                smooth.lastLensIdx = lensIdx;
-                currentLensColor = LENS_COLORS[lensIdx].color;
-                currentLensOpacity = LENS_COLORS[lensIdx].opacity;
-                rebuildGlasses();
-                showToast(`Lente: ${LENS_COLORS[lensIdx].name}`);
+                const now = Date.now();
+                if (now - gestureState.lastLensSwitchTime > 300) {
+                  smooth.lastLensIdx = lensIdx;
+                  gestureState.lastLensSwitchTime = now;
+                  currentLensColor = LENS_COLORS[lensIdx].color;
+                  currentLensOpacity = LENS_COLORS[lensIdx].opacity;
+                  rebuildGlasses();
+                  showToast(`Lente: ${LENS_COLORS[lensIdx].name}`);
+                }
               }
               gestureState.leftHandFingers = leftFingers;
             } else {
@@ -846,7 +971,7 @@ function runPrediction() {
           if (rightHandPts) {
             const rightHandX = handXNormalized(rightHandPts);
             const fist = isFist(rightHandPts);
-            const openFingers = countFingersHand(rightHandPts);
+            const openFingers = countOpenFingers(rightHandPts);
 
             if (fist && rightHandX < 0.5) {
               if (!gestureState.rightHandFist) {
@@ -876,11 +1001,13 @@ function runPrediction() {
                 if (strip) strip.classList.remove('active');
               }
 
-              if (openFingers >= 1 && openFingers <= 3 && rightHandX < 0.5) {
+              if (openFingers >= 1 && rightHandX < 0.5) {
                 const styleIdx = Math.min(openFingers - 1, STYLES.length - 1);
                 const newStyle = STYLES[styleIdx];
-                if (newStyle !== currentStyle) {
+                const now = Date.now();
+                if (newStyle !== currentStyle && now - gestureState.lastModelSwitchTime > 300) {
                   currentStyle = newStyle;
+                  gestureState.lastModelSwitchTime = now;
                   rebuildGlasses();
                   updateStyleMatrix(currentStyle);
                   showToast(`Estilo: ${currentStyle}`);
