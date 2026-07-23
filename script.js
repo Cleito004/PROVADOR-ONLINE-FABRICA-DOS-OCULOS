@@ -908,10 +908,10 @@ function runPrediction() {
         const absYaw = Math.abs(yaw);
         const pitch = Math.asin(clamp(-zAxis.y, -1, 1));
         const absPitch = Math.abs(pitch);
-        const yawFadeStart = 0.35;
-        const yawFadeEnd = 0.7;
-        const pitchFadeStart = 0.15;
-        const pitchFadeEnd = 0.4;
+        const yawFadeStart = 0.20;
+        const yawFadeEnd = 0.5;
+        const pitchFadeStart = 0.08;
+        const pitchFadeEnd = 0.3;
         const ud = glassesGroup.userData || {};
         const leftMat = ud.leftTempleMat;
         const rightMat = ud.rightTempleMat;
