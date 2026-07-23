@@ -495,6 +495,7 @@ function buildFromModel(style, frameColor, lensColor, lensOpacity) {
   box.getSize(bSize);
   wrapper.userData.templeLen = bSize.z * 0.5;
   wrapper.userData.halfW = bSize.x * 0.5;
+  wrapper.userData.halfH = bSize.y * 0.5;
   wrapper.add(normGroup);
   return wrapper;
 }
@@ -865,6 +866,8 @@ function runPrediction() {
 
       const yaw = Math.atan2(zAxis.x, zAxis.z);
       const absYaw = Math.abs(yaw);
+      const pitch = Math.asin(clamp(-zAxis.y, -1, 1));
+      const absPitch = Math.abs(pitch);
       const fadeStart = 0.35;
       const fadeEnd = 0.7;
       const ud = glassesGroup.userData || {};
@@ -872,21 +875,48 @@ function runPrediction() {
       const rightMat = ud.rightTempleMat;
       const fMat = ud.frameMat;
 
-      if (absYaw > fadeStart && leftMat && rightMat && fMat) {
-        const t = clamp((absYaw - fadeStart) / (fadeEnd - fadeStart), 0, 1);
+      const yawActive = absYaw > fadeStart && leftMat && rightMat && fMat;
+      const pitchActive = absPitch > fadeStart && leftMat && rightMat;
+
+      if (yawActive || pitchActive) {
         const halfW = ud.halfW || 30;
-        const sign = yaw > 0 ? 1 : -1;
-        const farMat = sign > 0 ? leftMat : rightMat;
-        const planeOff = sign * (-halfW + t * halfW * 1.1);
-        const clipPlane = new THREE.Plane();
-        clipPlane.setFromNormalAndCoplanarPoint(
-          new THREE.Vector3(sign, 0, 0),
-          new THREE.Vector3(planeOff, 0, 0)
-        );
-        farMat.clippingPlanes = [clipPlane];
-        fMat.clippingPlanes = [];
-        const nearMat = sign > 0 ? rightMat : leftMat;
-        nearMat.clippingPlanes = [];
+        const halfH = ud.halfH || 15;
+
+        let leftPlanes = [];
+        let rightPlanes = [];
+
+        if (yawActive) {
+          const tYaw = clamp((absYaw - fadeStart) / (fadeEnd - fadeStart), 0, 1);
+          const signYaw = yaw > 0 ? 1 : -1;
+          const planeOff = signYaw * (-halfW + tYaw * halfW * 1.1);
+          const yawPlane = new THREE.Plane();
+          yawPlane.setFromNormalAndCoplanarPoint(
+            new THREE.Vector3(signYaw, 0, 0),
+            new THREE.Vector3(planeOff, 0, 0)
+          );
+          const farMat = signYaw > 0 ? leftMat : rightMat;
+          const nearMat = signYaw > 0 ? rightMat : leftMat;
+          farMat.clippingPlanes = [yawPlane];
+          nearMat.clippingPlanes = [];
+        } else {
+          if (leftMat) leftMat.clippingPlanes = [];
+          if (rightMat) rightMat.clippingPlanes = [];
+        }
+
+        if (pitchActive) {
+          const tPitch = clamp((absPitch - fadeStart) / (fadeEnd - fadeStart), 0, 1);
+          const signPitch = pitch > 0 ? 1 : -1;
+          const pitchOffset = signPitch * (-halfH + tPitch * halfH * 1.1);
+          const pitchPlane = new THREE.Plane();
+          pitchPlane.setFromNormalAndCoplanarPoint(
+            new THREE.Vector3(0, signPitch, 0),
+            new THREE.Vector3(0, pitchOffset, 0)
+          );
+          if (leftMat) leftMat.clippingPlanes.push(pitchPlane);
+          if (rightMat) rightMat.clippingPlanes.push(pitchPlane);
+        }
+
+        if (fMat) fMat.clippingPlanes = [];
       } else {
         if (leftMat) leftMat.clippingPlanes = [];
         if (rightMat) rightMat.clippingPlanes = [];
