@@ -304,16 +304,44 @@ function splitFrameMesh(mesh, frameMat, leftMat, rightMat, modelHalfW) {
   const idx = geo.getIndex();
   if (!posAttr || !idx || idx.count < 3) return null;
 
-  const splitX = modelHalfW * 0.45;
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (let i = 0; i < posAttr.count; i++) {
+    const x = posAttr.getX(i);
+    const z = posAttr.getZ(i);
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (z < minZ) minZ = z;
+    if (z > maxZ) maxZ = z;
+  }
+
+  const xSplit = modelHalfW * 0.32;
+  const zMid = (minZ + maxZ) / 2;
   const leftTris = [], frameTris = [], rightTris = [];
   for (let i = 0; i < idx.count; i += 3) {
     const a = idx.getX(i), b = idx.getX(i + 1), c = idx.getX(i + 2);
     const avgX = (posAttr.getX(a) + posAttr.getX(b) + posAttr.getX(c)) / 3;
-    if (avgX < -splitX) leftTris.push(a, b, c);
-    else if (avgX > splitX) rightTris.push(a, b, c);
+    if (avgX < -xSplit) leftTris.push(a, b, c);
+    else if (avgX > xSplit) rightTris.push(a, b, c);
     else frameTris.push(a, b, c);
   }
-  if (leftTris.length === 0 || rightTris.length === 0 || frameTris.length === 0) return null;
+  if (leftTris.length === 0 || rightTris.length === 0 || frameTris.length === 0) {
+    const leftTris2 = [], frameTris2 = [], rightTris2 = [];
+    for (let i = 0; i < idx.count; i += 3) {
+      const a = idx.getX(i), b = idx.getX(i + 1), c = idx.getX(i + 2);
+      const avgX = (posAttr.getX(a) + posAttr.getX(b) + posAttr.getX(c)) / 3;
+      const avgZ = (posAttr.getZ(a) + posAttr.getZ(b) + posAttr.getZ(c)) / 3;
+      const isBehind = avgZ < zMid - (maxZ - minZ) * 0.1;
+      if (isBehind && avgX < 0) leftTris2.push(a, b, c);
+      else if (isBehind && avgX > 0) rightTris2.push(a, b, c);
+      else frameTris2.push(a, b, c);
+    }
+    if (leftTris2.length > 0 && rightTris2.length > 0 && frameTris2.length > 0) {
+      leftTris.length = 0; frameTris.length = 0; rightTris.length = 0;
+      leftTris.push(...leftTris2); frameTris.push(...frameTris2); rightTris.push(...rightTris2);
+    } else {
+      return null;
+    }
+  }
 
   const IndexArr = idx.count > 65535 ? Uint32Array : Uint16Array;
 
@@ -452,7 +480,8 @@ function buildFromModel(style, frameColor, lensColor, lensOpacity) {
   const modelHalfW = (modelBox.max.x - modelBox.min.x) * 0.5;
 
   let splitLeftMesh = null, splitRightMesh = null;
-  if (bestFrameMesh && bestXRange > modelHalfW * 0.5) {
+  console.log(`[SPLIT] bestXRange=${bestXRange.toFixed(2)} modelHalfW=${modelHalfW.toFixed(2)} threshold=${(modelHalfW * 0.25).toFixed(2)} bestFrameMesh=${!!bestFrameMesh}`);
+  if (bestFrameMesh && bestXRange > modelHalfW * 0.25) {
     const split = splitFrameMesh(bestFrameMesh, frameMat, leftTempleMat, rightTempleMat, modelHalfW);
     if (split) {
       const parent = bestFrameMesh.parent;
@@ -464,7 +493,12 @@ function buildFromModel(style, frameColor, lensColor, lensOpacity) {
       frameMeshes.add(split.frameMesh);
       splitLeftMesh = split.leftMesh;
       splitRightMesh = split.rightMesh;
+      console.log('[SPLIT] OK - split into 3 meshes');
+    } else {
+      console.log('[SPLIT] splitFrameMesh returned null');
     }
+  } else {
+    console.log('[SPLIT] SKIPPED - condition not met');
   }
 
   const frameMats = [];
@@ -882,8 +916,8 @@ function runPrediction() {
         const leftMat = ud.leftTempleMat;
         const rightMat = ud.rightTempleMat;
         const fMat = ud.frameMat;
-        const yawActive = absYaw > yawFadeStart && !!(leftMat || fMat);
-        const pitchActive = absPitch > pitchFadeStart && !!(leftMat || fMat);
+        const yawActive = absYaw > yawFadeStart;
+        const pitchActive = absPitch > pitchFadeStart;
 
         let leftMesh = ud.leftTempleMesh;
         let rightMesh = ud.rightTempleMesh;
@@ -901,50 +935,58 @@ function runPrediction() {
         const hasSeparateTemples = !!(leftMesh && rightMesh);
 
         if (hasSeparateTemples) {
-          if (pitchActive) {
-            leftMesh.visible = false;
-            rightMesh.visible = false;
-          } else {
-            leftMesh.visible = true;
-            rightMesh.visible = true;
-          }
-        }
-
-        const allMats = [leftMat, rightMat, fMat].filter(Boolean);
-
-        if (pitchActive && fMat) {
-          const tPitch = clamp((absPitch - pitchFadeStart) / (pitchFadeEnd - pitchFadeStart), 0, 1);
-          const signPitch = pitch > 0 ? -1 : 1;
-          const glassesPos = smooth.pos;
-          const halfH = ud.halfH || 15;
-          const pitchOffset = glassesPos.y + signPitch * (halfH * (1 - tPitch));
-          const pitchPlane = new THREE.Plane();
-          pitchPlane.setFromNormalAndCoplanarPoint(
-            new THREE.Vector3(0, signPitch, 0),
-            new THREE.Vector3(0, pitchOffset, 0)
-          );
-          allMats.forEach(m => { m.clippingPlanes = [pitchPlane]; });
-        } else if (yawActive) {
-          const tYaw = clamp((absYaw - yawFadeStart) / (yawFadeEnd - yawFadeStart), 0, 1);
-          const signYaw = yaw > 0 ? 1 : -1;
-          const halfW = ud.halfW || 30;
-          const planeOff = signYaw * (-halfW + tYaw * halfW * 1.1);
-          const yawPlane = new THREE.Plane();
-          yawPlane.setFromNormalAndCoplanarPoint(
-            new THREE.Vector3(signYaw, 0, 0),
-            new THREE.Vector3(planeOff, 0, 0)
-          );
-          if (leftMat && rightMat) {
-            const farMat = signYaw > 0 ? leftMat : rightMat;
-            const nearMat = signYaw > 0 ? rightMat : leftMat;
-            farMat.clippingPlanes = [yawPlane];
-            nearMat.clippingPlanes = [];
-          } else if (fMat) {
-            fMat.clippingPlanes = [yawPlane];
-          }
-          if (fMat && leftMat && rightMat) fMat.clippingPlanes = [];
+          const bothActive = pitchActive || yawActive;
+          leftMesh.visible = !bothActive;
+          rightMesh.visible = !bothActive;
+          if (leftMat) leftMat.clippingPlanes = [];
+          if (rightMat) rightMat.clippingPlanes = [];
+          if (fMat) fMat.clippingPlanes = [];
+          const allMats = [leftMat, rightMat, fMat].filter(Boolean);
+          allMats.forEach(m => {
+            m.transparent = false;
+            m.opacity = 1.0;
+            m.needsUpdate = true;
+          });
         } else {
-          allMats.forEach(m => { m.clippingPlanes = []; });
+          const allMats = [fMat, leftMat, rightMat].filter(Boolean);
+          if (pitchActive || yawActive) {
+            let fadeAmount = 0;
+            if (pitchActive) {
+              fadeAmount = clamp((absPitch - pitchFadeStart) / (pitchFadeEnd - pitchFadeStart), 0, 1);
+            } else if (yawActive) {
+              fadeAmount = clamp((absYaw - yawFadeStart) / (yawFadeEnd - yawFadeStart), 0, 1);
+            }
+
+            allMats.forEach(m => {
+              if (!m._origTransparent) {
+                m._origTransparent = m.transparent;
+                m._origOpacity = m.opacity;
+              }
+              m.transparent = true;
+              m.opacity = 1.0 - fadeAmount * 0.7;
+              m.depthWrite = fadeAmount < 0.3;
+              m.needsUpdate = true;
+            });
+
+            if (fMat && leftMat && rightMat) {
+              fMat.clippingPlanes = [];
+            }
+          } else {
+            allMats.forEach(m => {
+              if (m._origTransparent !== undefined) {
+                m.transparent = m._origTransparent;
+                m.opacity = m._origOpacity;
+                delete m._origTransparent;
+                delete m._origOpacity;
+              } else {
+                m.transparent = false;
+                m.opacity = 1.0;
+              }
+              m.depthWrite = true;
+              m.clippingPlanes = [];
+              m.needsUpdate = true;
+            });
+          }
         }
       } catch (e) {
         console.warn('[TEMPLE] Error:', e);
@@ -952,9 +994,21 @@ function runPrediction() {
     } else {
       if (glassesGroup) glassesGroup.visible = false;
       const ud2 = glassesGroup?.userData;
-      if (ud2?.leftTempleMat) ud2.leftTempleMat.clippingPlanes = [];
-      if (ud2?.rightTempleMat) ud2.rightTempleMat.clippingPlanes = [];
-      if (ud2?.frameMat) ud2.frameMat.clippingPlanes = [];
+      const cleanMats = [ud2?.leftTempleMat, ud2?.rightTempleMat, ud2?.frameMat].filter(Boolean);
+      cleanMats.forEach(m => {
+        m.clippingPlanes = [];
+        if (m._origTransparent !== undefined) {
+          m.transparent = m._origTransparent;
+          m.opacity = m._origOpacity;
+          delete m._origTransparent;
+          delete m._origOpacity;
+        } else {
+          m.transparent = false;
+          m.opacity = 1.0;
+        }
+        m.depthWrite = true;
+        m.needsUpdate = true;
+      });
       smooth.readyPos = false;
       smooth.readyRot = false;
       smooth.scanning = false;
