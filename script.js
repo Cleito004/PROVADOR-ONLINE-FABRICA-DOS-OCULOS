@@ -882,8 +882,8 @@ function runPrediction() {
         const leftMat = ud.leftTempleMat;
         const rightMat = ud.rightTempleMat;
         const fMat = ud.frameMat;
-        const yawActive = absYaw > yawFadeStart && leftMat && rightMat && fMat;
-        const pitchActive = absPitch > pitchFadeStart && leftMat && rightMat;
+        const yawActive = absYaw > yawFadeStart && !!(leftMat || fMat);
+        const pitchActive = absPitch > pitchFadeStart && !!(leftMat || fMat);
 
         let leftMesh = ud.leftTempleMesh;
         let rightMesh = ud.rightTempleMesh;
@@ -898,41 +898,33 @@ function runPrediction() {
           });
         }
 
-        if (!leftMesh || !rightMesh) {
-          const candidates = [];
-          glassesGroup.traverse(c => {
-            if (c.isMesh && !c.userData.isLens) {
-              const b = new THREE.Box3().setFromObject(c);
-              const s = b.max.clone().sub(b.min);
-              candidates.push({ mesh: c, name: c.name, w: s.x, h: s.y, d: s.z, cx: (b.max.x + b.min.x) / 2 });
-            }
-          });
-          if (candidates.length >= 2) {
-            candidates.sort((a, b) => a.cx - b.cx);
-            if (!leftMesh) leftMesh = candidates[0].mesh;
-            if (!rightMesh) rightMesh = candidates[candidates.length - 1].mesh;
+        const hasSeparateTemples = !!(leftMesh && rightMesh);
+
+        if (hasSeparateTemples) {
+          if (pitchActive) {
+            leftMesh.visible = false;
+            rightMesh.visible = false;
+          } else {
+            leftMesh.visible = true;
+            rightMesh.visible = true;
           }
         }
 
-        window._templeDebug = window._templeDebug || 0;
-        window._templeDebug++;
-        if (window._templeDebug % 60 === 1) {
-          const meshInfo = [];
-          glassesGroup.traverse(c => { if (c.isMesh) meshInfo.push(`${c.name||'?'}:${c.userData.isLens?'L':'F'}`); });
-          console.log(`[TEMPLE#${window._templeDebug}] pitch=${(pitch*180/Math.PI).toFixed(1)}° active=${pitchActive} left=${!!leftMesh} right=${!!rightMesh} [${meshInfo.join(',')}]`);
-        }
+        const allMats = [leftMat, rightMat, fMat].filter(Boolean);
 
-        if (pitchActive) {
-          if (leftMesh) leftMesh.visible = false;
-          if (rightMesh) rightMesh.visible = false;
-          if (leftMat) leftMat.clippingPlanes = [];
-          if (rightMat) rightMat.clippingPlanes = [];
-        } else {
-          if (leftMesh) leftMesh.visible = true;
-          if (rightMesh) rightMesh.visible = true;
-        }
-
-        if (yawActive && !pitchActive) {
+        if (pitchActive && fMat) {
+          const tPitch = clamp((absPitch - pitchFadeStart) / (pitchFadeEnd - pitchFadeStart), 0, 1);
+          const signPitch = pitch > 0 ? -1 : 1;
+          const glassesPos = smooth.pos;
+          const halfH = ud.halfH || 15;
+          const pitchOffset = glassesPos.y + signPitch * (halfH * (1 - tPitch));
+          const pitchPlane = new THREE.Plane();
+          pitchPlane.setFromNormalAndCoplanarPoint(
+            new THREE.Vector3(0, signPitch, 0),
+            new THREE.Vector3(0, pitchOffset, 0)
+          );
+          allMats.forEach(m => { m.clippingPlanes = [pitchPlane]; });
+        } else if (yawActive) {
           const tYaw = clamp((absYaw - yawFadeStart) / (yawFadeEnd - yawFadeStart), 0, 1);
           const signYaw = yaw > 0 ? 1 : -1;
           const halfW = ud.halfW || 30;
@@ -942,15 +934,17 @@ function runPrediction() {
             new THREE.Vector3(signYaw, 0, 0),
             new THREE.Vector3(planeOff, 0, 0)
           );
-          const farMat = signYaw > 0 ? leftMat : rightMat;
-          farMat.clippingPlanes = [yawPlane];
-          const nearMat = signYaw > 0 ? rightMat : leftMat;
-          nearMat.clippingPlanes = [];
-          if (fMat) fMat.clippingPlanes = [];
-        } else if (!pitchActive) {
-          if (leftMat) leftMat.clippingPlanes = [];
-          if (rightMat) rightMat.clippingPlanes = [];
-          if (fMat) fMat.clippingPlanes = [];
+          if (leftMat && rightMat) {
+            const farMat = signYaw > 0 ? leftMat : rightMat;
+            const nearMat = signYaw > 0 ? rightMat : leftMat;
+            farMat.clippingPlanes = [yawPlane];
+            nearMat.clippingPlanes = [];
+          } else if (fMat) {
+            fMat.clippingPlanes = [yawPlane];
+          }
+          if (fMat && leftMat && rightMat) fMat.clippingPlanes = [];
+        } else {
+          allMats.forEach(m => { m.clippingPlanes = []; });
         }
       } catch (e) {
         console.warn('[TEMPLE] Error:', e);
