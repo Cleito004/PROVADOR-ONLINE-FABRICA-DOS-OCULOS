@@ -897,6 +897,13 @@ function runPrediction() {
         });
       }
 
+      if (!window._tLog) {
+        window._tLog = true;
+        const names = [];
+        glassesGroup.traverse(c => { if (c.isMesh) names.push(c.name || '(empty)'); });
+        console.log(`[TEMPLE] left=${!!leftMesh} right=${!!rightMesh} pitch=${(pitch*180).toFixed(1)}° active=${pitchActive} meshes=[${names.join(',')}]`);
+      }
+
       if (pitchActive) {
         if (leftMesh) leftMesh.visible = false;
         if (rightMesh) rightMesh.visible = false;
