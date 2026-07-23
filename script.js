@@ -452,7 +452,7 @@ function buildFromModel(style, frameColor, lensColor, lensOpacity) {
   const modelHalfW = (modelBox.max.x - modelBox.min.x) * 0.5;
 
   let splitLeftMesh = null, splitRightMesh = null;
-  if (bestFrameMesh && bestXRange > modelHalfW * 1.2) {
+  if (bestFrameMesh && bestXRange > modelHalfW * 0.5) {
     const split = splitFrameMesh(bestFrameMesh, frameMat, leftTempleMat, rightTempleMat, modelHalfW);
     if (split) {
       const parent = bestFrameMesh.parent;
@@ -884,26 +884,27 @@ function runPrediction() {
       const yawActive = absYaw > yawFadeStart && leftMat && rightMat && fMat;
       const pitchActive = absPitch > pitchFadeStart && leftMat && rightMat;
 
-      const templeMeshes = [];
-      glassesGroup.traverse(c => {
-        if (c.isMesh && (c.name === 'leftTemple' || c.name === 'rightTemple')) {
-          templeMeshes.push(c);
-        }
-      });
+      let leftMesh = ud.leftTempleMesh;
+      let rightMesh = ud.rightTempleMesh;
 
-      if (!window._templeLogged) {
-        window._templeLogged = true;
-        const allMeshNames = [];
-        glassesGroup.traverse(c => { if (c.isMesh) allMeshNames.push(c.name || '(sem nome)'); });
-        console.log(`[DEBUG] templeMeshes: ${templeMeshes.length}, all meshes: ${allMeshNames.join(', ')}, pitch: ${(pitch*180/Math.PI).toFixed(1)}°, pitchActive: ${pitchActive}`);
+      if (!leftMesh || !rightMesh) {
+        glassesGroup.traverse(c => {
+          if (c.isMesh) {
+            const n = (c.name || '').toLowerCase();
+            if (n.includes('lefttemple') || n.includes('left_arm') || n.includes('left_haste')) leftMesh = c;
+            if (n.includes('righttemple') || n.includes('right_arm') || n.includes('right_haste')) rightMesh = c;
+          }
+        });
       }
 
-      if (pitchActive && templeMeshes.length > 0) {
-        templeMeshes.forEach(m => { m.visible = false; });
+      if (pitchActive) {
+        if (leftMesh) leftMesh.visible = false;
+        if (rightMesh) rightMesh.visible = false;
         if (leftMat) leftMat.clippingPlanes = [];
         if (rightMat) rightMat.clippingPlanes = [];
-      } else if (!pitchActive) {
-        templeMeshes.forEach(m => { m.visible = true; });
+      } else {
+        if (leftMesh) leftMesh.visible = true;
+        if (rightMesh) rightMesh.visible = true;
       }
 
       if (yawActive && !pitchActive) {
