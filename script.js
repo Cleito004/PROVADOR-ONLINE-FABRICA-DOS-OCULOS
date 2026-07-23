@@ -873,31 +873,41 @@ function runPrediction() {
       const absYaw = Math.abs(yaw);
       const pitch = Math.asin(clamp(-zAxis.y, -1, 1));
       const absPitch = Math.abs(pitch);
-      const fadeStart = 0.35;
-      const fadeEnd = 0.7;
+      const yawFadeStart = 0.35;
+      const yawFadeEnd = 0.7;
+      const pitchFadeStart = 0.15;
+      const pitchFadeEnd = 0.4;
       const ud = glassesGroup.userData || {};
       const leftMat = ud.leftTempleMat;
       const rightMat = ud.rightTempleMat;
       const fMat = ud.frameMat;
-      const leftMesh = ud.leftTempleMesh;
-      const rightMesh = ud.rightTempleMesh;
+      const yawActive = absYaw > yawFadeStart && leftMat && rightMat && fMat;
+      const pitchActive = absPitch > pitchFadeStart && leftMat && rightMat;
 
-      const yawActive = absYaw > fadeStart && leftMat && rightMat && fMat;
-      const pitchActive = absPitch > fadeStart && leftMat && rightMat;
+      const templeMeshes = [];
+      glassesGroup.traverse(c => {
+        if (c.isMesh && (c.name === 'leftTemple' || c.name === 'rightTemple')) {
+          templeMeshes.push(c);
+        }
+      });
 
-      if (pitchActive) {
-        const tPitch = clamp((absPitch - fadeStart) / (fadeEnd - fadeStart), 0, 1);
-        if (leftMesh) leftMesh.visible = tPitch < 1;
-        if (rightMesh) rightMesh.visible = tPitch < 1;
+      if (!window._templeLogged) {
+        window._templeLogged = true;
+        const allMeshNames = [];
+        glassesGroup.traverse(c => { if (c.isMesh) allMeshNames.push(c.name || '(sem nome)'); });
+        console.log(`[DEBUG] templeMeshes: ${templeMeshes.length}, all meshes: ${allMeshNames.join(', ')}, pitch: ${(pitch*180/Math.PI).toFixed(1)}°, pitchActive: ${pitchActive}`);
+      }
+
+      if (pitchActive && templeMeshes.length > 0) {
+        templeMeshes.forEach(m => { m.visible = false; });
         if (leftMat) leftMat.clippingPlanes = [];
         if (rightMat) rightMat.clippingPlanes = [];
-      } else {
-        if (leftMesh) leftMesh.visible = true;
-        if (rightMesh) rightMesh.visible = true;
+      } else if (!pitchActive) {
+        templeMeshes.forEach(m => { m.visible = true; });
       }
 
       if (yawActive && !pitchActive) {
-        const tYaw = clamp((absYaw - fadeStart) / (fadeEnd - fadeStart), 0, 1);
+        const tYaw = clamp((absYaw - yawFadeStart) / (yawFadeEnd - yawFadeStart), 0, 1);
         const signYaw = yaw > 0 ? 1 : -1;
         const halfW = ud.halfW || 30;
         const planeOff = signYaw * (-halfW + tYaw * halfW * 1.1);
