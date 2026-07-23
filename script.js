@@ -970,10 +970,10 @@ function runPrediction() {
 
           if (rightHandPts) {
             const rightHandX = handXNormalized(rightHandPts);
-            const fist = isFist(rightHandPts);
+            const openFingersTotal = countFingersHand(rightHandPts);
             const openFingers = countOpenFingers(rightHandPts);
 
-            if (fist && rightHandX < 0.5) {
+            if (openFingersTotal === 0 && rightHandX < 0.5) {
               if (!gestureState.rightHandFist) {
                 gestureState.rightHandFist = true;
                 gestureState.fistActiveX = handXNormalized(rightHandPts);
