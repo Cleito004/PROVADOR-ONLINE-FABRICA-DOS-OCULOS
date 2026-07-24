@@ -148,7 +148,7 @@ const WebARRocksMirror = (function(){
       // (on the base of the nose)
       // its position in dev/face.obj is [0, 47, 53]
       // +Y -> move up
-      threeFaceAccessory.position.set(0, 40, 75);
+      threeFaceAccessory.position.set(0, 40, 150);
 
       // in dev/face.obj the face is looking upward,
       // whereas in the glasses model the branches are parallel to the ground
@@ -459,4 +459,5 @@ const WebARRocksMirror = (function(){
   }; //end that
   return that;
 })();
+
 
