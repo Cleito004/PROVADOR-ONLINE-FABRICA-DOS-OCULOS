@@ -62,9 +62,21 @@ const STYLE_CONFIG = {
 let faceLandmarker;
 let handLandmarker;
 let glassesGroup;
+let occluder = null;
 let videoTexture;
 let videoSprite;
 let renderer, scene, camera;
+
+// Occluder ("máscara invisível da cabeça"): esconde automaticamente as astes
+// que ficam atrás da cabeça quando o rosto gira. Ajustável ao vivo pelo console
+// via window.OCC (ex: OCC.debug = true; OCC.rz = 0.6).
+window.OCC = {
+  debug: false, // true = mostra a máscara em vermelho para ajuste visual
+  back: 0.30,   // deslocamento do centro para trás do rosto (x largura do rosto)
+  rx: 0.52,     // raio horizontal (x largura do rosto)
+  ry: 0.62,     // raio vertical (x altura do rosto)
+  rz: 0.55,     // raio de profundidade (x largura do rosto)
+};
 let video;
 let predictionInFlight = false;
 let isActive = false;
@@ -696,6 +708,18 @@ async function initScene(videoEl) {
   glassesGroup.visible = false;
   rebuildGlasses();
 
+  // Occluder: esfera (unitária) que será escalada como elipsoide da cabeça.
+  // colorWrite:false => invisível na tela; depthWrite:true => ocupa profundidade,
+  // escondendo qualquer parte dos óculos que fique atrás dela (aste do lado oposto).
+  const occGeo = new THREE.SphereGeometry(1, 32, 24);
+  const occMat = new THREE.MeshBasicMaterial({ colorWrite: false });
+  occluder = new THREE.Mesh(occGeo, occMat);
+  // renderOrder entre o vídeo de fundo (0) e os óculos (1): escreve profundidade
+  // DEPOIS do vídeo (para não furar o fundo) e ANTES dos óculos (para ocluí-los).
+  occluder.renderOrder = 0.5;
+  occluder.visible = false;
+  scene.add(occluder);
+
   window.addEventListener('resize', () => {
     const vw2 = video.videoWidth || 640;
     const vh2 = video.videoHeight || 480;
@@ -935,6 +959,33 @@ function runPrediction() {
       if (!glassesGroup.visible) glassesGroup.visible = true;
       glassesGroup.updateWorldMatrix(true, true);
 
+      // ===== Occluder (máscara invisível da cabeça) =====
+      if (occluder) {
+        const O = window.OCC;
+        // Centro da cabeça = ponto médio dos olhos, deslocado para trás do rosto
+        const headCenter = eMid.clone().addScaledVector(zAxis, -O.back * fW);
+        occluder.position.copy(headCenter);
+        // Orientação alinhada aos eixos da cabeça
+        const occBasis = new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis);
+        occluder.quaternion.setFromRotationMatrix(occBasis);
+        // Tamanho do elipsoide (esfera unitária escalada)
+        occluder.scale.set(O.rx * fW, O.ry * fH, O.rz * fW);
+        occluder.visible = true;
+        // Modo debug: mostra a máscara em vermelho semitransparente para ajuste
+        const m = occluder.material;
+        if (O.debug) {
+          m.colorWrite = true;
+          m.transparent = true;
+          m.opacity = 0.45;
+          m.color.set(0xff0033);
+        } else {
+          m.colorWrite = false;
+          m.transparent = false;
+          m.opacity = 1.0;
+        }
+        m.needsUpdate = true;
+      }
+
       try {
         const yaw = Math.atan2(zAxis.x, zAxis.z);
         const absYaw = Math.abs(yaw);
@@ -969,22 +1020,9 @@ function runPrediction() {
 
         const hasSeparateTemples = !!(leftMesh && rightMesh);
 
+        // Astes sempre 100% visíveis - o occluder (máscara da cabeça) cuida de
+        // esconder automaticamente a aste que fica atrás da cabeça ao girar o rosto.
         let leftOp = 1.0, rightOp = 1.0;
-
-        if (yawFade > 0) {
-          // Yaw ativo (qualquer rotação lateral): aste oposta some, visível fica 100%
-          if (yaw > 0) {
-            leftOp = 1.0 - yawFade;
-            rightOp = 1.0;
-          } else {
-            leftOp = 1.0;
-            rightOp = 1.0 - yawFade;
-          }
-        } else {
-          // Pitch puro (sem rotação lateral): ambas somem gradualmente
-          leftOp = 1.0 - pitchFade;
-          rightOp = 1.0 - pitchFade;
-        }
 
         if (hasSeparateTemples) {
           leftMesh.visible = leftOp > 0.01;
@@ -1043,6 +1081,7 @@ function runPrediction() {
       }
     } else {
       if (glassesGroup) glassesGroup.visible = false;
+      if (occluder) occluder.visible = false;
       const ud2 = glassesGroup?.userData;
       const cleanMats = [ud2?.leftTempleMat, ud2?.rightTempleMat, ud2?.frameMat].filter(Boolean);
       cleanMats.forEach(m => {
