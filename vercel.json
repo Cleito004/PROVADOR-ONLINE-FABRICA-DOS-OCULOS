@@ -31,5 +31,19 @@
     { "source": "/core/(.*)", "destination": "/core/$1" },
     { "source": "/(.*\\.(?:js|css|glb|hdr|png|jpg,json,svg,wasm))", "destination": "/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*\\.(?:js|css|html))",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, must-revalidate" }
+      ]
+    }
   ]
 }
