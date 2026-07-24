@@ -287,7 +287,7 @@ function initMirror() {
     taaLevel: 2,
 
     branchFadingZ: -0.9,
-    branchFadingTransition: 1.2,
+    branchFadingTransition: 2.0,
     branchBendingAngle: 5,
     branchBendingZ: 0,
 
@@ -473,4 +473,5 @@ async function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init)
+
 
