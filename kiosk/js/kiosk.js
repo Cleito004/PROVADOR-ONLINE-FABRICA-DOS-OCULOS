@@ -1,74 +1,74 @@
-// ── Glasses Catalog ──────────────────────────────────────────────────────
+﻿// â”€â”€ Glasses Catalog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const GLASSES_CATALOG = [
   // Demo models (comprovados)
-  { id: 'demo1', gender: 'unisex', name: 'Elegante', icon: '👓',
+  { id: 'demo1', gender: 'unisex', name: 'Elegante', icon: 'ðŸ‘“',
     file: 'assets/models3D/glasses1.glb' },
-  { id: 'demo2', gender: 'unisex', name: 'Clássico', icon: '🕶️',
+  { id: 'demo2', gender: 'unisex', name: 'ClÃ¡ssico', icon: 'ðŸ•¶ï¸',
     file: 'assets/models3D/glasses2.glb' },
 
-  // Poly Pizza CC0 — Femininos
-  { id: 'pp01', gender: 'female', name: 'Gatinho', icon: '🐱',
+  // Poly Pizza CC0 â€” Femininos
+  { id: 'pp01', gender: 'female', name: 'Gatinho', icon: 'ðŸ±',
     file: 'assets/models3D/poly-pizza/Glasses-Dz9SyIEq7w.glb' },
-  { id: 'pp02', gender: 'female', name: 'Borboleta', icon: '🦋',
+  { id: 'pp02', gender: 'female', name: 'Borboleta', icon: 'ðŸ¦‹',
     file: 'assets/models3D/poly-pizza/Glasses-J289oMy6pQ.glb' },
-  { id: 'pp03', gender: 'female', name: 'Coração', icon: '💖',
+  { id: 'pp03', gender: 'female', name: 'CoraÃ§Ã£o', icon: 'ðŸ’–',
     file: 'assets/models3D/poly-pizza/Glasses-7NZp449iJq.glb' },
-  { id: 'pp04', gender: 'female', name: 'Floral', icon: '🌸',
+  { id: 'pp04', gender: 'female', name: 'Floral', icon: 'ðŸŒ¸',
     file: 'assets/models3D/poly-pizza/Glasses-XLysBbtilu.glb' },
-  { id: 'pp05', gender: 'female', name: 'Cristal', icon: '✨',
+  { id: 'pp05', gender: 'female', name: 'Cristal', icon: 'âœ¨',
     file: 'assets/models3D/poly-pizza/Glasses-crbuIoq2dO.glb' },
-  { id: 'pp06', gender: 'female', name: 'Sereia', icon: '🧜',
+  { id: 'pp06', gender: 'female', name: 'Sereia', icon: 'ðŸ§œ',
     file: 'assets/models3D/poly-pizza/Pixel Glasses.glb' },
 
-  // Poly Pizza CC0 — Masculinos
-  { id: 'pp07', gender: 'male', name: 'Aviador', icon: '✈️',
+  // Poly Pizza CC0 â€” Masculinos
+  { id: 'pp07', gender: 'male', name: 'Aviador', icon: 'âœˆï¸',
     file: 'assets/models3D/poly-pizza/Glasses-fNEK0SGJ6D.glb' },
-  { id: 'pp08', gender: 'male', name: 'Retrô', icon: '🎸',
+  { id: 'pp08', gender: 'male', name: 'RetrÃ´', icon: 'ðŸŽ¸',
     file: 'assets/models3D/poly-pizza/Glasses-WoYlUvyUAb.glb' },
-  { id: 'pp09', gender: 'male', name: 'Corsa', icon: '🏎️',
+  { id: 'pp09', gender: 'male', name: 'Corsa', icon: 'ðŸŽï¸',
     file: 'assets/models3D/poly-pizza/Glasses-1TJPsi4VIT.glb' },
-  { id: 'pp10', gender: 'male', name: 'Courage', icon: '💪',
+  { id: 'pp10', gender: 'male', name: 'Courage', icon: 'ðŸ’ª',
     file: 'assets/models3D/poly-pizza/Glasses-3jamofoetY.glb' },
-  { id: 'pp11', gender: 'male', name: 'Tank', icon: '🛡️',
+  { id: 'pp11', gender: 'male', name: 'Tank', icon: 'ðŸ›¡ï¸',
     file: 'assets/models3D/poly-pizza/Glasses-p5QgQxkMBE.glb' },
 
-  // Poly Pizza CC0 — Unissex
-  { id: 'pp12', gender: 'unisex', name: 'Minimalist', icon: '◻️',
+  // Poly Pizza CC0 â€” Unissex
+  { id: 'pp12', gender: 'unisex', name: 'Minimalist', icon: 'â—»ï¸',
     file: 'assets/models3D/poly-pizza/Glasses.glb' },
-  { id: 'pp13', gender: 'unisex', name: 'Party', icon: '🎉',
+  { id: 'pp13', gender: 'unisex', name: 'Party', icon: 'ðŸŽ‰',
     file: 'assets/models3D/poly-pizza/Party Glasses.glb' },
-  { id: 'pp14', gender: 'unisex', name: 'Esportivo', icon: '🏃',
+  { id: 'pp14', gender: 'unisex', name: 'Esportivo', icon: 'ðŸƒ',
     file: 'assets/models3D/poly-pizza/Ski Goggles.glb' },
-  { id: 'pp15', gender: 'unisex', name: 'Urban', icon: '🏙️',
+  { id: 'pp15', gender: 'unisex', name: 'Urban', icon: 'ðŸ™ï¸',
     file: 'assets/models3D/poly-pizza/Glasses-kAxq5NzcFZ.glb' },
-  { id: 'pp16', gender: 'unisex', name: 'Navegador', icon: '🧭',
+  { id: 'pp16', gender: 'unisex', name: 'Navegador', icon: 'ðŸ§­',
     file: 'assets/models3D/poly-pizza/Glasses-oQtjZCNFoo.glb' },
-  { id: 'pp17', gender: 'unisex', name: 'Ciclista', icon: '🚴',
+  { id: 'pp17', gender: 'unisex', name: 'Ciclista', icon: 'ðŸš´',
     file: 'assets/models3D/poly-pizza/Glasses-yYdsPoULg1.glb' },
-  { id: 'pp18', gender: 'unisex', name: 'Steampunk', icon: '⚙️',
+  { id: 'pp18', gender: 'unisex', name: 'Steampunk', icon: 'âš™ï¸',
     file: 'assets/models3D/poly-pizza/Glasses-Zh87A7UV3V.glb' },
 
-  // Poly Pizza CC0 — added to complete all 28 models
-  { id: 'pp19', gender: 'female', name: 'Geométrica', icon: '🔷',
+  // Poly Pizza CC0 â€” added to complete all 28 models
+  { id: 'pp19', gender: 'female', name: 'GeomÃ©trica', icon: 'ðŸ”·',
     file: 'assets/models3D/poly-pizza/Glasses-9SQY3Gsq2s.glb' },
-  { id: 'pp20', gender: 'female', name: 'Aro Metal', icon: '💿',
+  { id: 'pp20', gender: 'female', name: 'Aro Metal', icon: 'ðŸ’¿',
     file: 'assets/models3D/poly-pizza/Glasses-DBEk0SMQCt.glb' },
-  { id: 'pp21', gender: 'female', name: 'Gata', icon: '😺',
+  { id: 'pp21', gender: 'female', name: 'Gata', icon: 'ðŸ˜º',
     file: 'assets/models3D/poly-pizza/Glasses-j3zHqDAnzH.glb' },
-  { id: 'pp22', gender: 'female', name: 'Aro Fino', icon: '〰️',
+  { id: 'pp22', gender: 'female', name: 'Aro Fino', icon: 'ã€°ï¸',
     file: 'assets/models3D/poly-pizza/Glasses-YchMXfQNU0.glb' },
-  { id: 'pp23', gender: 'male', name: 'Degradê', icon: '🌫️',
+  { id: 'pp23', gender: 'male', name: 'DegradÃª', icon: 'ðŸŒ«ï¸',
     file: 'assets/models3D/poly-pizza/Glasses-9xOJlCsQzX.glb' },
-  { id: 'pp24', gender: 'male', name: 'Azul', icon: '🔵',
+  { id: 'pp24', gender: 'male', name: 'Azul', icon: 'ðŸ”µ',
     file: 'assets/models3D/poly-pizza/Glasses-i5dNUjQMUG.glb' },
-  { id: 'pp25', gender: 'male', name: 'Wayfarer', icon: '🕶️',
+  { id: 'pp25', gender: 'male', name: 'Wayfarer', icon: 'ðŸ•¶ï¸',
     file: 'assets/models3D/poly-pizza/Glasses-j3xPyO1mvt.glb' },
-  { id: 'pp26', gender: 'unisex', name: 'Redondo', icon: '⭕',
+  { id: 'pp26', gender: 'unisex', name: 'Redondo', icon: 'â­•',
     file: 'assets/models3D/poly-pizza/Glasses-oc8MPJuSud.glb' },
-  { id: 'pp27', gender: 'unisex', name: 'Retangular', icon: '▬',
+  { id: 'pp27', gender: 'unisex', name: 'Retangular', icon: 'â–¬',
     file: 'assets/models3D/poly-pizza/Glasses-PNZqCaX1m9.glb' },
-  { id: 'pp28', gender: 'unisex', name: 'Clássico Fino', icon: '◇',
+  { id: 'pp28', gender: 'unisex', name: 'ClÃ¡ssico Fino', icon: 'â—‡',
     file: 'assets/models3D/poly-pizza/Glasses-SyNFHIhIDd.glb' },
 ]
 
@@ -76,7 +76,7 @@ let currentGlasses = null
 let currentGender = 'unisex'
 let engineReady = false
 
-// ── DOM Refs ─────────────────────────────────────────────────────────────
+// â”€â”€ DOM Refs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const $ = id => document.getElementById(id)
 const startScreen = $('startScreen')
@@ -91,7 +91,7 @@ const vitrinePrev = $('vitrinePrev')
 const vitrineNext = $('vitrineNext')
 const autoCountdown = $('autoCountdown')
 
-// ── Gender Detection (face-api.js) ──────────────────────────────────────
+// â”€â”€ Gender Detection (face-api.js) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 let genderDetector = null
 let genderDetectionInterval = null
@@ -105,7 +105,7 @@ async function initGenderDetector() {
     genderDetector = true
     console.log('[Kiosk] face-api.js carregado')
   } catch (e) {
-    console.warn('[Kiosk] face-api.js não disponível:', e.message)
+    console.warn('[Kiosk] face-api.js nÃ£o disponÃ­vel:', e.message)
     genderDetector = false
   }
 }
@@ -152,14 +152,14 @@ function startGenderAutoDetect() {
 
   const check = () => {
     if (!engineReady || attempts >= MAX_ATTEMPTS) {
-      autoCountdown.textContent = '—'
+      autoCountdown.textContent = 'â€”'
       return
     }
 
     detectGenderSilent(videoEl).then(result => {
       if (result && result.genderProbability > 0.7) {
         applyDetectedGender(result.gender)
-        autoCountdown.textContent = '✓'
+        autoCountdown.textContent = 'âœ“'
         return
       }
 
@@ -169,7 +169,7 @@ function startGenderAutoDetect() {
         autoCountdown.textContent = Math.ceil(remaining / 2)
         setTimeout(check, 500)
       } else {
-        autoCountdown.textContent = '—'
+        autoCountdown.textContent = 'â€”'
       }
     }).catch(() => {
       attempts++
@@ -180,7 +180,7 @@ function startGenderAutoDetect() {
   setTimeout(check, 500)
 }
 
-// ── Gender Toggle ───────────────────────────────────────────────────────
+// â”€â”€ Gender Toggle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function cycleGender() {
   const order = ['female', 'male', 'unisex']
@@ -192,7 +192,7 @@ function cycleGender() {
   rebuildVitrine()
 }
 
-// ── Vitrine ────────────────────────────────────────────────────────────
+// â”€â”€ Vitrine â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function rebuildVitrine() {
   const filtered = GLASSES_CATALOG.filter(g =>
@@ -238,7 +238,7 @@ function loadGlassesModel(url) {
   }
 }
 
-// ── Mirror Initialization ─────────────────────────────────────────────
+// â”€â”€ Mirror Initialization â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function initMirror() {
   const canvasFace = $('WebARRocksFaceCanvas')
@@ -287,7 +287,7 @@ function initMirror() {
     taaLevel: 2,
 
     branchFadingZ: -0.9,
-    branchFadingTransition: 0.6,
+    branchFadingTransition: 1.2,
     branchBendingAngle: 5,
     branchBendingZ: 0,
 
@@ -327,7 +327,7 @@ function initMirror() {
   })
 }
 
-// ── Loading overlay ────────────────────────────────────────────────────
+// â”€â”€ Loading overlay â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function showLoading(text) {
   const existing = document.querySelector('.loading-overlay')
@@ -356,21 +356,21 @@ function showToast(msg) {
   t._hide = setTimeout(() => t.classList.remove('visible'), 4000)
 }
 
-// ── Start Screen Flow ──────────────────────────────────────────────────
+// â”€â”€ Start Screen Flow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function getCameraHelp(err) {
   const isHttp = location.protocol === 'http:' && location.hostname !== 'localhost'
   if (isHttp) {
-    return 'Câmera bloqueada em HTTP. Use HTTPS: https://' + location.hostname + ':5501'
+    return 'CÃ¢mera bloqueada em HTTP. Use HTTPS: https://' + location.hostname + ':5501'
   }
   const msg = (err && (err.message || err)) || ''
   if (msg.includes('NotAllowed') || msg.includes('Permission'))
-    return 'Permissão da câmera negada. Permita o acesso no navegador.'
+    return 'PermissÃ£o da cÃ¢mera negada. Permita o acesso no navegador.'
   if (msg.includes('NotFound'))
-    return 'Nenhuma câmera encontrada no dispositivo.'
+    return 'Nenhuma cÃ¢mera encontrada no dispositivo.'
   if (msg.includes('WEBCAM_UNAVAILABLE'))
-    return 'Câmera não encontrada. Conecte uma câmera e recarregue.'
-  return 'Câmera indisponível. Verifique se está conectada e use HTTPS.'
+    return 'CÃ¢mera nÃ£o encontrada. Conecte uma cÃ¢mera e recarregue.'
+  return 'CÃ¢mera indisponÃ­vel. Verifique se estÃ¡ conectada e use HTTPS.'
 }
 
 function handleStart() {
@@ -379,14 +379,14 @@ function handleStart() {
   startBtn.disabled = true
   startScreen.style.display = 'none'
   mirrorScreen.style.display = 'flex'
-  showLoading('Iniciando câmera...')
+  showLoading('Iniciando cÃ¢mera...')
 
   setTimeout(() => {
     initMirror()
   }, 300)
 }
 
-// ── Screenshot ─────────────────────────────────────────────────────────
+// â”€â”€ Screenshot â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function captureScreenshot() {
   if (typeof WebARRocksMirror === 'undefined') return
@@ -399,7 +399,7 @@ function captureScreenshot() {
   })
 }
 
-// ── Reset ──────────────────────────────────────────────────────────────
+// â”€â”€ Reset â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function resetKiosk() {
   if (typeof WebARRocksMirror !== 'undefined' && WebARRocksMirror.destroy) {
@@ -421,13 +421,13 @@ function resetKiosk() {
   }
 }
 
-// ── Vitrine scroll ─────────────────────────────────────────────────────
+// â”€â”€ Vitrine scroll â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function scrollVitrine(dir) {
   vitrineTrack.scrollBy({ left: dir * 150, behavior: 'smooth' })
 }
 
-// ── Gender buttons on start screen ─────────────────────────────────────
+// â”€â”€ Gender buttons on start screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 document.querySelectorAll('.gender-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -437,14 +437,14 @@ document.querySelectorAll('.gender-btn').forEach(btn => {
   })
 })
 
-// ── Auto gender countdown ──────────────────────────────────────────────
+// â”€â”€ Auto gender countdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function startAutoGenderCountdown() {
   let count = 3
   const tick = () => {
     autoCountdown.textContent = count
     if (count <= 0) {
-      autoCountdown.textContent = '✓'
+      autoCountdown.textContent = 'âœ“'
       return
     }
     count--
@@ -453,7 +453,7 @@ function startAutoGenderCountdown() {
   tick()
 }
 
-// ── Init ───────────────────────────────────────────────────────────────
+// â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function init() {
   showLoading('Carregando detector facial...')
@@ -473,3 +473,4 @@ async function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init)
+
