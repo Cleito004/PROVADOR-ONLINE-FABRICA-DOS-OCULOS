@@ -986,11 +986,6 @@ function runPrediction() {
           rightOp = 1.0 - pitchFade;
         }
 
-        if (!window._dbgFrame) window._dbgFrame = 0;
-        if (++window._dbgFrame % 30 === 0) {
-          console.log(`[TEMPLE v4.19] yaw=${yaw.toFixed(2)} pitch=${pitch.toFixed(2)} yawFade=${yawFade.toFixed(2)} pitchFade=${pitchFade.toFixed(2)} hasSep=${hasSeparateTemples} L=${leftOp.toFixed(2)} R=${rightOp.toFixed(2)}`);
-        }
-
         if (hasSeparateTemples) {
           leftMesh.visible = leftOp > 0.01;
           rightMesh.visible = rightOp > 0.01;
