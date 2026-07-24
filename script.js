@@ -943,8 +943,8 @@ function runPrediction() {
 
         const PITCH_START = 0.15;
         const PITCH_FULL = 0.45;
-        const YAW_START = 0.20;
-        const YAW_FULL = 0.50;
+        const YAW_START = 0.25;
+        const YAW_FULL = 0.60;
 
         const pitchFade = clamp((absPitch - PITCH_START) / (PITCH_FULL - PITCH_START), 0, 1);
         const yawFade = clamp((absYaw - YAW_START) / (YAW_FULL - YAW_START), 0, 1);
@@ -971,20 +971,19 @@ function runPrediction() {
 
         let leftOp = 1.0, rightOp = 1.0;
 
-        if (pitchFade > 0 && yawFade < 0.3) {
-          leftOp = 1.0 - pitchFade;
-          rightOp = 1.0 - pitchFade;
-        } else if (yawFade > 0 && pitchFade < 0.15) {
-          if (yaw > 0) { leftOp = 0; rightOp = 1.0; }
-          else          { leftOp = 1.0; rightOp = 0; }
-        } else if (pitchFade > 0 && yawFade >= 0.15) {
+        if (yawFade > 0) {
+          // Yaw ativo (qualquer rotação lateral): aste oposta some, visível fica 100%
           if (yaw > 0) {
-            leftOp = 1.0 - pitchFade;
+            leftOp = 1.0 - yawFade;
             rightOp = 1.0;
           } else {
             leftOp = 1.0;
-            rightOp = 1.0 - pitchFade;
+            rightOp = 1.0 - yawFade;
           }
+        } else {
+          // Pitch puro (sem rotação lateral): ambas somem gradualmente
+          leftOp = 1.0 - pitchFade;
+          rightOp = 1.0 - pitchFade;
         }
 
         if (hasSeparateTemples) {
