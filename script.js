@@ -511,12 +511,9 @@ function buildFromModel(style, frameColor, lensColor, lensOpacity) {
       splitRightMesh = split.rightMesh;
       splitLeftZ = split.leftZ;
       splitRightZ = split.rightZ;
-      console.log('[SPLIT] OK - left:', !!splitLeftMesh, 'right:', !!splitRightMesh);
     } else {
-      console.log('[SPLIT] FALHOU - splitFrameMesh retornou null');
     }
   } else {
-    console.log('[SPLIT] PULADO - bestFrameMesh:', !!bestFrameMesh, 'bestXRange:', bestXRange.toFixed(2), 'modelHalfW*0.25:', (modelHalfW * 0.25).toFixed(2));
   }
 
   if (splitLeftZ && leftTempleMat) {
@@ -987,11 +984,6 @@ function runPrediction() {
           // Pitch puro (sem rotação lateral): ambas somem gradualmente
           leftOp = 1.0 - pitchFade;
           rightOp = 1.0 - pitchFade;
-        }
-
-        if (!window._dbgFrame) window._dbgFrame = 0;
-        if (++window._dbgFrame % 30 === 0) {
-          console.log(`[TEMPLE] yaw=${yaw.toFixed(2)} pitch=${pitch.toFixed(2)} yawFade=${yawFade.toFixed(2)} pitchFade=${pitchFade.toFixed(2)} hasSep=${hasSeparateTemples} L=${leftOp.toFixed(2)} R=${rightOp.toFixed(2)}`);
         }
 
         if (hasSeparateTemples) {
