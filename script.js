@@ -946,8 +946,8 @@ function runPrediction() {
 
         const PITCH_START = 0.15;
         const PITCH_FULL = 0.45;
-        const YAW_START = 0.25;
-        const YAW_FULL = 0.60;
+        const YAW_START = 0.08;
+        const YAW_FULL = 0.25;
 
         const pitchFade = clamp((absPitch - PITCH_START) / (PITCH_FULL - PITCH_START), 0, 1);
         const yawFade = clamp((absYaw - YAW_START) / (YAW_FULL - YAW_START), 0, 1);
@@ -1157,9 +1157,11 @@ function runPrediction() {
               const sensitiveX = clamp((0.47 - handX) / 0.38, 0, 1);
 
               const fc = frameColorFromPosition(sensitiveX);
-              currentColor = fc.hex;
-              gestureState.frameColorIdx = Math.round(sensitiveX * (FRAME_COLORS_RAINBOW.length - 1));
-              rebuildGlasses();
+              if (fc.hex !== currentColor) {
+                currentColor = fc.hex;
+                gestureState.frameColorIdx = Math.round(sensitiveX * (FRAME_COLORS_RAINBOW.length - 1));
+                rebuildGlasses();
+              }
 
               const needle = document.getElementById('color-needle');
               if (needle) {
