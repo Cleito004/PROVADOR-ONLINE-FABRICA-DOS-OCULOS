@@ -480,7 +480,6 @@ function buildFromModel(style, frameColor, lensColor, lensOpacity) {
   const modelHalfW = (modelBox.max.x - modelBox.min.x) * 0.5;
 
   let splitLeftMesh = null, splitRightMesh = null;
-  console.log(`[SPLIT] bestXRange=${bestXRange.toFixed(2)} modelHalfW=${modelHalfW.toFixed(2)} threshold=${(modelHalfW * 0.25).toFixed(2)} bestFrameMesh=${!!bestFrameMesh}`);
   if (bestFrameMesh && bestXRange > modelHalfW * 0.25) {
     const split = splitFrameMesh(bestFrameMesh, frameMat, leftTempleMat, rightTempleMat, modelHalfW);
     if (split) {
@@ -493,12 +492,9 @@ function buildFromModel(style, frameColor, lensColor, lensOpacity) {
       frameMeshes.add(split.frameMesh);
       splitLeftMesh = split.leftMesh;
       splitRightMesh = split.rightMesh;
-      console.log('[SPLIT] OK - split into 3 meshes');
     } else {
-      console.log('[SPLIT] splitFrameMesh returned null');
     }
   } else {
-    console.log('[SPLIT] SKIPPED - condition not met');
   }
 
   const frameMats = [];
@@ -908,16 +904,19 @@ function runPrediction() {
         const absYaw = Math.abs(yaw);
         const pitch = Math.asin(clamp(-zAxis.y, -1, 1));
         const absPitch = Math.abs(pitch);
-        const yawFadeStart = 0.20;
-        const yawFadeEnd = 0.5;
-        const pitchFadeStart = 0.08;
-        const pitchFadeEnd = 0.3;
+
+        const PITCH_START = 0.15;
+        const PITCH_FULL = 0.45;
+        const YAW_START = 0.20;
+        const YAW_FULL = 0.50;
+
+        const pitchFade = clamp((absPitch - PITCH_START) / (PITCH_FULL - PITCH_START), 0, 1);
+        const yawFade = clamp((absYaw - YAW_START) / (YAW_FULL - YAW_START), 0, 1);
+
         const ud = glassesGroup.userData || {};
         const leftMat = ud.leftTempleMat;
         const rightMat = ud.rightTempleMat;
         const fMat = ud.frameMat;
-        const yawActive = absYaw > yawFadeStart;
-        const pitchActive = absPitch > pitchFadeStart;
 
         let leftMesh = ud.leftTempleMesh;
         let rightMesh = ud.rightTempleMesh;
@@ -934,43 +933,58 @@ function runPrediction() {
 
         const hasSeparateTemples = !!(leftMesh && rightMesh);
 
-        if (hasSeparateTemples) {
-          const bothActive = pitchActive || yawActive;
-          leftMesh.visible = !bothActive;
-          rightMesh.visible = !bothActive;
-          if (leftMat) leftMat.clippingPlanes = [];
-          if (rightMat) rightMat.clippingPlanes = [];
-          if (fMat) fMat.clippingPlanes = [];
-          const allMats = [leftMat, rightMat, fMat].filter(Boolean);
-          allMats.forEach(m => {
-            m.transparent = false;
-            m.opacity = 1.0;
-            m.needsUpdate = true;
-          });
-        } else {
-          const allMats = [fMat, leftMat, rightMat].filter(Boolean);
-          if (pitchActive || yawActive) {
-            let fadeAmount = 0;
-            if (pitchActive) {
-              fadeAmount = clamp((absPitch - pitchFadeStart) / (pitchFadeEnd - pitchFadeStart), 0, 1);
-            } else if (yawActive) {
-              fadeAmount = clamp((absYaw - yawFadeStart) / (yawFadeEnd - yawFadeStart), 0, 1);
-            }
+        let leftOp = 1.0, rightOp = 1.0;
 
+        if (pitchFade > 0 && yawFade < 0.3) {
+          leftOp = 1.0 - pitchFade;
+          rightOp = 1.0 - pitchFade;
+        } else if (pitchFade > 0 && yawFade >= 0.3) {
+          if (yaw > 0) {
+            leftOp = 1.0 - pitchFade;
+            rightOp = 1.0;
+          } else {
+            leftOp = 1.0;
+            rightOp = 1.0 - pitchFade;
+          }
+        }
+
+        if (hasSeparateTemples) {
+          leftMesh.visible = leftOp > 0.01;
+          rightMesh.visible = rightOp > 0.01;
+
+          if (leftMat) {
+            leftMat.transparent = leftOp < 0.99;
+            leftMat.opacity = leftOp;
+            leftMat.clippingPlanes = [];
+            leftMat.needsUpdate = true;
+          }
+          if (rightMat) {
+            rightMat.transparent = rightOp < 0.99;
+            rightMat.opacity = rightOp;
+            rightMat.clippingPlanes = [];
+            rightMat.needsUpdate = true;
+          }
+          if (fMat) {
+            fMat.clippingPlanes = [];
+            fMat.transparent = false;
+            fMat.opacity = 1.0;
+            fMat.needsUpdate = true;
+          }
+        } else {
+          const frameOp = Math.min(leftOp, rightOp);
+          const allMats = [fMat, leftMat, rightMat].filter(Boolean);
+
+          if (frameOp < 0.99) {
             allMats.forEach(m => {
               if (!m._origTransparent) {
                 m._origTransparent = m.transparent;
                 m._origOpacity = m.opacity;
               }
               m.transparent = true;
-              m.opacity = 1.0 - fadeAmount * 0.7;
-              m.depthWrite = fadeAmount < 0.3;
+              m.opacity = frameOp;
+              m.depthWrite = frameOp > 0.7;
               m.needsUpdate = true;
             });
-
-            if (fMat && leftMat && rightMat) {
-              fMat.clippingPlanes = [];
-            }
           } else {
             allMats.forEach(m => {
               if (m._origTransparent !== undefined) {
@@ -1009,6 +1023,8 @@ function runPrediction() {
         m.depthWrite = true;
         m.needsUpdate = true;
       });
+      if (ud2?.leftTempleMesh) ud2.leftTempleMesh.visible = true;
+      if (ud2?.rightTempleMesh) ud2.rightTempleMesh.visible = true;
       smooth.readyPos = false;
       smooth.readyRot = false;
       smooth.scanning = false;
