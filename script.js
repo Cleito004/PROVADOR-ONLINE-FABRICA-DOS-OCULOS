@@ -367,9 +367,25 @@ function splitFrameMesh(mesh, frameMat, leftMat, rightMat, modelHalfW) {
     return g;
   }
 
+  function regionZRange(tris) {
+    let rMinZ = Infinity, rMaxZ = -Infinity;
+    const seen = new Set();
+    for (let i = 0; i < tris.length; i++) {
+      const vi = tris[i];
+      if (seen.has(vi)) continue;
+      seen.add(vi);
+      const z = posAttr.getZ(vi);
+      if (z < rMinZ) rMinZ = z;
+      if (z > rMaxZ) rMaxZ = z;
+    }
+    return { minZ: rMinZ, maxZ: rMaxZ };
+  }
+
   const leftGeo = buildRegion(leftTris);
   const frameGeo = buildRegion(frameTris);
   const rightGeo = buildRegion(rightTris);
+  const leftZ = regionZRange(leftTris);
+  const rightZ = regionZRange(rightTris);
 
   const meshes = [
     { geo: leftGeo, mat: leftMat, name: 'leftTemple' },
@@ -387,7 +403,7 @@ function splitFrameMesh(mesh, frameMat, leftMat, rightMat, modelHalfW) {
     return ms;
   });
 
-  return { leftMesh: meshes[0], frameMesh: meshes[1], rightMesh: meshes[2] };
+  return { leftMesh: meshes[0], frameMesh: meshes[1], rightMesh: meshes[2], leftZ, rightZ };
 }
 
 function buildFromModel(style, frameColor, lensColor, lensOpacity) {
@@ -480,6 +496,7 @@ function buildFromModel(style, frameColor, lensColor, lensOpacity) {
   const modelHalfW = (modelBox.max.x - modelBox.min.x) * 0.5;
 
   let splitLeftMesh = null, splitRightMesh = null;
+  let splitLeftZ = null, splitRightZ = null;
   if (bestFrameMesh && bestXRange > modelHalfW * 0.25) {
     const split = splitFrameMesh(bestFrameMesh, frameMat, leftTempleMat, rightTempleMat, modelHalfW);
     if (split) {
@@ -492,10 +509,30 @@ function buildFromModel(style, frameColor, lensColor, lensOpacity) {
       frameMeshes.add(split.frameMesh);
       splitLeftMesh = split.leftMesh;
       splitRightMesh = split.rightMesh;
+      splitLeftZ = split.leftZ;
+      splitRightZ = split.rightZ;
     } else {
     }
   } else {
   }
+
+  if (splitLeftZ && leftTempleMat) {
+    const tipCut = splitLeftZ.minZ + (splitLeftZ.maxZ - splitLeftZ.minZ) * 0.22;
+    const clipPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -tipCut);
+    leftTempleMat.clippingPlanes = [clipPlane];
+    leftTempleMat.clipShadows = true;
+    leftTempleMat.needsUpdate = true;
+  }
+  if (splitRightZ && rightTempleMat) {
+    const tipCut = splitRightZ.minZ + (splitRightZ.maxZ - splitRightZ.minZ) * 0.22;
+    const clipPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -tipCut);
+    rightTempleMat.clippingPlanes = [clipPlane];
+    rightTempleMat.clipShadows = true;
+    rightTempleMat.needsUpdate = true;
+  }
+
+  wrapper.userData.tipClipLeft = leftTempleMat?.clippingPlanes || [];
+  wrapper.userData.tipClipRight = rightTempleMat?.clippingPlanes || [];
 
   const frameMats = [];
   clone.traverse(c => {
@@ -938,7 +975,10 @@ function runPrediction() {
         if (pitchFade > 0 && yawFade < 0.3) {
           leftOp = 1.0 - pitchFade;
           rightOp = 1.0 - pitchFade;
-        } else if (pitchFade > 0 && yawFade >= 0.3) {
+        } else if (yawFade > 0 && pitchFade < 0.15) {
+          if (yaw > 0) { leftOp = 0; rightOp = 1.0; }
+          else          { leftOp = 1.0; rightOp = 0; }
+        } else if (pitchFade > 0 && yawFade >= 0.15) {
           if (yaw > 0) {
             leftOp = 1.0 - pitchFade;
             rightOp = 1.0;
@@ -955,13 +995,11 @@ function runPrediction() {
           if (leftMat) {
             leftMat.transparent = leftOp < 0.99;
             leftMat.opacity = leftOp;
-            leftMat.clippingPlanes = [];
             leftMat.needsUpdate = true;
           }
           if (rightMat) {
             rightMat.transparent = rightOp < 0.99;
             rightMat.opacity = rightOp;
-            rightMat.clippingPlanes = [];
             rightMat.needsUpdate = true;
           }
           if (fMat) {
@@ -1010,7 +1048,6 @@ function runPrediction() {
       const ud2 = glassesGroup?.userData;
       const cleanMats = [ud2?.leftTempleMat, ud2?.rightTempleMat, ud2?.frameMat].filter(Boolean);
       cleanMats.forEach(m => {
-        m.clippingPlanes = [];
         if (m._origTransparent !== undefined) {
           m.transparent = m._origTransparent;
           m.opacity = m._origOpacity;
@@ -1023,6 +1060,9 @@ function runPrediction() {
         m.depthWrite = true;
         m.needsUpdate = true;
       });
+      if (ud2?.leftTempleMat && ud2.tipClipLeft) ud2.leftTempleMat.clippingPlanes = ud2.tipClipLeft;
+      if (ud2?.rightTempleMat && ud2.tipClipRight) ud2.rightTempleMat.clippingPlanes = ud2.tipClipRight;
+      if (ud2?.frameMat) ud2.frameMat.clippingPlanes = [];
       if (ud2?.leftTempleMesh) ud2.leftTempleMesh.visible = true;
       if (ud2?.rightTempleMesh) ud2.rightTempleMesh.visible = true;
       smooth.readyPos = false;
