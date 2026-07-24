@@ -531,9 +531,6 @@ function buildFromModel(style, frameColor, lensColor, lensOpacity) {
     rightTempleMat.needsUpdate = true;
   }
 
-  wrapper.userData.tipClipLeft = leftTempleMat?.clippingPlanes || [];
-  wrapper.userData.tipClipRight = rightTempleMat?.clippingPlanes || [];
-
   const frameMats = [];
   clone.traverse(c => {
     if (c.isMesh && !c.userData.isLens && c.name !== 'leftTemple' && c.name !== 'rightTemple')
@@ -568,6 +565,8 @@ function buildFromModel(style, frameColor, lensColor, lensOpacity) {
   wrapper.userData.halfH = bSize.y * 0.5;
   wrapper.userData.leftTempleMesh = splitLeftMesh;
   wrapper.userData.rightTempleMesh = splitRightMesh;
+  wrapper.userData.tipClipLeft = leftTempleMat?.clippingPlanes || [];
+  wrapper.userData.tipClipRight = rightTempleMat?.clippingPlanes || [];
   wrapper.add(normGroup);
   return wrapper;
 }
