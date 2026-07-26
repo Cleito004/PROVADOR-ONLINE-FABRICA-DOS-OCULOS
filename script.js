@@ -1560,7 +1560,12 @@ const BACKEND_WS_URL = 'ws://localhost:8080/ws';
 let backendWs = null;
 let backendConnected = false;
 let backendReconnectTimer = null;
-let backendAvailable = true;
+
+// O backend opcional roda na maquina de quem desenvolve. Numa pagina servida por
+// HTTPS o navegador bloqueia ws:// por mixed content e o console enche de erro
+// sem nenhum ganho, entao so tentamos conectar quando a propria pagina e local.
+const isLocalPage = ['localhost', '127.0.0.1', '[::1]', ''].includes(location.hostname);
+let backendAvailable = isLocalPage;
 
 function connectBackend() {
   if (!backendAvailable) return;
