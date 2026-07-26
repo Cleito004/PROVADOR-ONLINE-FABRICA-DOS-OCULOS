@@ -68,7 +68,7 @@ head.renderOrder = 2;
 if (params.get('cabeca') === '1') scene.add(head);
 
 const loader = new GLTFLoader();
-loader.load('../core/assets/models/square.glb', gltf => {
+loader.load('../core/assets/models/' + (params.get('modelo') || 'square') + '.glb', gltf => {
   const clone = gltf.scene;
   let maxDim = 0;
   {
