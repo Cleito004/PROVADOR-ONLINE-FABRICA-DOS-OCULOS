@@ -1,0 +1,41 @@
+a barra rgb precisa mostrar quado todos os dedos estivrem abaixcados e não quando o dedão(polegar estiver) esticado  ✅ 26/07 v4.21.0
+erro de posição do óculos conforme a distÂncia  ✅ 26/07 v4.21.0
+a aprtir de um certo angulo a aste oposta some  ✅
+quando a cabeça está completamente abaixada ou levantada as 2 astes somem  ✅ 26/07 v4.21.0
+a cor da lente escolhida some quando retiramos as mãos  ✅ 26/07 v4.21.0
+garantir com que os movimentos apresentados no on bording sejam possíveis no projeto  ✅ 26/07 (onboarding_new3.pdf)
+mais de uma pessoa poder utilizar o provador  --> PENDENTE
+
+
+-------------------------------------------------------------------
+AINDA EM ABERTO
+-------------------------------------------------------------------
+
+1) mais de uma pessoa poder utilizar o provador ao mesmo tempo
+   hoje o script.js usa numFaces: 1 e um unico conjunto oculos + occluder +
+   suavizacao. para N pessoas: um conjunto por rosto.
+
+2) kiosk: a mascara (occluder) tapa a armacao
+   investigacao anterior, nao concluida. use o painel de ajuste (tecla T ou
+   ?ajuste=1) e va reduzindo OCC.scale / OCC.z ate a armacao aparecer.
+
+
+-------------------------------------------------------------------
+FALTA VALIDAR NA CAMERA (os ✅ de 26/07 foram testados so por codigo)
+-------------------------------------------------------------------
+
+- 1/2/3 dedos trocam a lente so depois de ~0,8s parado, com a barrinha enchendo
+- abrir a mao (4 dedos) trava a escolha; tirar a mao da tela nao muda mais nada
+- punho fechado com o polegar recolhido abre a barra rgb; polegar esticado nao
+- 1/2/3 dedos da outra mao trocam o modelo, do mesmo jeito
+- aproximar e afastar o rosto sem os oculos escorregarem
+- cabeca totalmente para cima / para baixo sem as 2 astes sumirem
+
+ajuste ao vivo pelo console, sem recarregar a pagina:
+  GEST.debug = true    mostra punho / polegar / dedos na tela
+  GEST.holdMs          tempo do gesto (800)
+  GEST.thumbTuck       quando o polegar conta como recolhido (0.95)
+  GEST.fingerCurl      quando o dedo conta como abaixado (1.05)
+  GEST.edgeMargin      borda do quadro ignorada (0.02)
+  OCC.debug = true     mostra a mascara da cabeca
+  OCC.clip / OCC.front corte da mascara (astes no pitch)
