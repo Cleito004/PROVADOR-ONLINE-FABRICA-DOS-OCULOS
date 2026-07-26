@@ -27,7 +27,11 @@ This repo is not one app; it is **two unrelated tracking/rendering engines** plu
 ```powershell
 # Root vanilla app (the main app) — static server, no build step
 node serve.mjs            # http://localhost:8083  (also what Playwright uses)
-node serve-root.js        # http://localhost:8000  (alternative)
+node serve-root.js        # http://localhost:8000  (alternative; handles query strings)
+
+# Shop-window mode (the actual deliverable: screen behind the shop glass)
+.\iniciar-vitrine.ps1     # serves locally + opens Chrome/Edge in --kiosk on ?vitrine=1
+.\iniciar-vitrine.ps1 -Online   # same, but pointing at the Vercel URL
 
 # Kiosk — needs HTTPS for camera access on any non-localhost device
 .\gerar-ssl.ps1           # once: self-signed cert into %TEMP%\kiosk-cert.pfx, SANs for every LAN IP
@@ -80,6 +84,7 @@ Pipeline: `startApp()` auto-starts on load (up to 3 retries) → `getUserMedia` 
   - `countOpenFingers()` deliberately ignores the thumb, so 4 is the maximum — that is why "open hand" and "4 fingers" are the same reading and 4 is reserved for locking rather than a 4th option.
   - The RGB `#color-strip` is the exception: it needs the hand near the lateral edge to reach the ends of the rainbow, so it does **not** use the edge check. It activates on `isHandFullyClosed()` (all four fingers curled **and** thumb tucked, measured as distances normalised by hand size), so a raised thumb does not trigger it.
   - Live tuning from the console via `window.GEST`: `debug` (prints fist/thumb/finger metrics on screen), `fingerCurl`, `thumbTuck`, `holdMs`, `edgeMargin`.
+- **Shop-window mode** (`?vitrine=1`, `MODO_VITRINE` in `script.js`): the delivered product is a screen **behind shop glass**, running all day, with nobody able to touch it or fix it. So this mode hides the cursor and the adjustment sliders, holds a screen Wake Lock, retries the camera **forever** instead of giving up after 3 attempts, and runs a watchdog that restarts `startApp()` if `ultimoFrameEm` stops being updated (frozen loop, lost WebGL context, camera taken by another app). Real fullscreen can't be forced from JS without a user gesture — `iniciar-vitrine.ps1` supplies it by launching the browser with `--kiosk`.
 - **Optional Node backend client** at the bottom of `script.js`: connects to `ws://localhost:8080/ws` and streams 320×240 JPEGs every 100 ms. `handleBackendMessage()` is deliberately a no-op — it used to open the color strip on `hand.isOpen`, which was both inverted (the strip is for a *closed* hand) and a second source of truth competing with the local gesture. It self-disables permanently on the first error (`backendAvailable = false`), so the app is fully functional with no backend.
 
 ## Node backend (`backend/`)

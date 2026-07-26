@@ -285,6 +285,18 @@ main {
 }
 #hand-gesture-status.show { opacity: 1; }
 
+/* ── Modo vitrine (?vitrine=1) ───────────────────── */
+/* Tela atrás do vidro: ninguém toca, ninguém vê o cursor, e os sliders de
+   ajuste só ocupariam espaço porque não há como usá-los. */
+body.vitrine,
+body.vitrine * {
+  cursor: none !important;
+}
+body.vitrine #adjustment-panel,
+body.vitrine #face-info {
+  display: none;
+}
+
 /* ── Progresso do gesto (dwell) ──────────────────── */
 /* Fica logo acima da faixa de cores para não disputar espaço com ela. */
 #gesture-dwell {

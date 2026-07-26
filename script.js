@@ -66,6 +66,24 @@ const STYLE_CONFIG = {
   cateye:  { scale: 300, depth: 0, down: 2,  centerX: 0, upOffset: 0,  scaleFactor: 0.01, flipY: true },
 };
 
+// ── Modo vitrine ────────────────────────────────────────────────────────────
+// Liga com ?vitrine=1 na URL. É para a tela que fica atrás do vidro da loja:
+// ninguém toca nela e ninguém está por perto para consertar se travar.
+//   - some o cursor do mouse e os sliders de ajuste (não há como usá-los)
+//   - a tela não apaga sozinha (Wake Lock)
+//   - a câmera é reconectada indefinidamente, em vez de desistir na 3ª tentativa
+//   - um vigia reinicia o app se o loop de detecção parar de rodar
+// Tela cheia de verdade o navegador só dá com gesto do usuário, então isso vem
+// de fora: iniciar-vitrine.ps1 abre o navegador já em modo quiosque.
+const MODO_VITRINE = new URLSearchParams(location.search).has('vitrine');
+
+window.VITRINE = {
+  travouMs: 12000,  // sem nenhum frame processado por este tempo => reinicia
+  religarMs: 4000,  // espera entre tentativas de reconectar a câmera
+};
+
+let ultimoFrameEm = Date.now();
+
 let faceLandmarker;
 let handLandmarker;
 // Cada pessoa detectada ganha o seu próprio par de óculos e a sua máscara de
@@ -1447,6 +1465,7 @@ function runPrediction() {
   }
 
   predictionInFlight = false;
+  ultimoFrameEm = Date.now(); // batimento do loop, vigiado no modo vitrine
   schedulePrediction();
 }
 
@@ -1508,7 +1527,10 @@ function stopStream() {
 }
 
 let autoRetryCount = 0;
-const MAX_AUTO_RETRY = 3;
+// Na vitrine ninguem esta por perto para clicar em "tentar de novo", entao a
+// reconexao nao desiste: a camera pode falhar quando o PC acorda, quando outro
+// programa a toma por um instante ou quando o cabo e esbarrado.
+const MAX_AUTO_RETRY = MODO_VITRINE ? Infinity : 3;
 let autoStartDone = false;
 
 async function startApp() {
@@ -1533,8 +1555,8 @@ async function startApp() {
     loadingOverlay.classList.add('hidden');
     if (autoRetryCount < MAX_AUTO_RETRY) {
       autoRetryCount++;
-      showToast(`Tentativa ${autoRetryCount}/${MAX_AUTO_RETRY}...`);
-      setTimeout(startApp, 3000);
+      showToast(MODO_VITRINE ? 'Reconectando a camera...' : `Tentativa ${autoRetryCount}/${MAX_AUTO_RETRY}...`);
+      setTimeout(startApp, MODO_VITRINE ? window.VITRINE.religarMs : 3000);
     } else {
       showToast('Câmera indisponível. Verifique as permissões.');
     }
@@ -1557,8 +1579,8 @@ async function startApp() {
     loadingOverlay.classList.add('hidden');
     if (autoRetryCount < MAX_AUTO_RETRY) {
       autoRetryCount++;
-      showToast(`Reconectando... (${autoRetryCount}/${MAX_AUTO_RETRY})`);
-      setTimeout(startApp, 3000);
+      showToast(MODO_VITRINE ? 'Reconectando...' : `Reconectando... (${autoRetryCount}/${MAX_AUTO_RETRY})`);
+      setTimeout(startApp, MODO_VITRINE ? window.VITRINE.religarMs : 3000);
     } else {
       showToast('Falha ao carregar IA. Verifique sua conexão.');
     }
@@ -1577,11 +1599,63 @@ async function startApp() {
 
 // ── Auto-start ──────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
+  if (MODO_VITRINE) iniciarModoVitrine();
   if (!autoStartDone) {
     autoStartDone = true;
     setTimeout(startApp, 500);
   }
 });
+
+// ── Modo vitrine: manter de pé sem ninguém por perto ────────────────────
+let wakeLockAtual = null;
+
+async function manterTelaAcesa() {
+  if (!('wakeLock' in navigator)) return;
+  try {
+    wakeLockAtual = await navigator.wakeLock.request('screen');
+    // O sistema solta o wake lock sozinho ao minimizar ou bloquear a tela;
+    // o visibilitychange abaixo pede de novo quando a página volta.
+    wakeLockAtual.addEventListener('release', () => { wakeLockAtual = null; });
+  } catch (e) {
+    console.warn('[Vitrine] nao foi possivel manter a tela acesa:', e.message);
+  }
+}
+
+function iniciarModoVitrine() {
+  document.body.classList.add('vitrine');
+  manterTelaAcesa();
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      if (!wakeLockAtual) manterTelaAcesa();
+      // Voltar de uma suspensão costuma derrubar o stream da câmera.
+      if (!isActive) { autoRetryCount = 0; startApp(); }
+    }
+  });
+
+  // Vigia: o loop de detecção marca a hora a cada frame. Se parar de marcar,
+  // alguma coisa travou (câmera sumiu, contexto WebGL perdido, aba congelada)
+  // e o caminho mais confiável é recomeçar do zero.
+  setInterval(() => {
+    if (!isActive) return;
+    if (Date.now() - ultimoFrameEm > window.VITRINE.travouMs) {
+      console.warn('[Vitrine] deteccao parada, reiniciando');
+      ultimoFrameEm = Date.now();
+      autoRetryCount = 0;
+      startApp();
+    }
+  }, 5000);
+
+  // Contexto WebGL perdido (driver reiniciou, GPU ocupada) devolve a tela preta
+  // sem lançar erro nenhum: aqui vira um reinício.
+  window.addEventListener('webglcontextlost', () => {
+    console.warn('[Vitrine] contexto WebGL perdido, reiniciando');
+    autoRetryCount = 0;
+    setTimeout(startApp, 1000);
+  }, true);
+
+  console.log('[Vitrine] modo vitrine ligado');
+}
 
 // ── Python Backend WebSocket Client ─────────────────────────────────────
 
