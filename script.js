@@ -138,10 +138,15 @@ window.OCC = {
 // máscara recuada: na tela cresce só a aste do lado para onde o rosto virou.
 window.TEMPLE = {
   enabled: true,
-  reveal: 0.40,    // quanto a máscara recua de perfil (soma em OCC.frontGap)
+  reveal: 0.55,    // quanto a máscara recua de perfil (soma em OCC.frontGap)
   rise: 0.10,      // velocidade do crescimento por frame (menor = mais suave)
   yawStart: 0.20,  // a partir de quanto de giro começa a revelar (seno do yaw)
 };
+
+// Tamanho dos óculos no rosto, como multiplicador do tamanho calibrado.
+// 1.0 = o de sempre; 1.05 = 5% maior. Serve para afinar o encaixe sem ter de
+// republicar: mexa aqui, veja na tela, e me passe o valor que ficar bom.
+window.FIT = { scale: 1.0 };
 
 // Suavização do rastreamento. Ajustável ao vivo pelo console (window.SMOOTH).
 // Valores MENORES = mais suave e mais tremor filtrado, porém com leve atraso;
@@ -160,8 +165,8 @@ window.SMOOTH = {
   // Filtrar mais (baixar pos/rot) resolveria o tremor, mas ao custo de atraso
   // quando a pessoa realmente se mexe; a zona morta não cobra esse preço.
   // Se o movimento lento começar a andar "em degraus", é sinal de que está alta.
-  deadZone: 0.02,     // fração da largura do rosto (~3 px num rosto de 140 px)
-  deadZoneRot: 0.01,  // radianos (~0,6 grau)
+  deadZone: 0.035,    // fração da largura do rosto (~5 px num rosto de 140 px)
+  deadZoneRot: 0.018, // radianos (~1 grau)
 };
 
 // Limiares dos gestos de mão. Ajustáveis ao vivo pelo console (window.GEST),
@@ -1185,7 +1190,7 @@ function updateSlotFromFace(slot, f) {
   const fwNorm = f.fW / CFG.refHeadWidth;
   const depAdj = clamp(f.noseDepth * CFG.refHeadWidth * 0.06, -1, 3);
 
-  const tScaleVal = bS * CFG.glassesScale;
+  const tScaleVal = bS * CFG.glassesScale * window.FIT.scale;
   const tScale = new THREE.Vector3(tScaleVal, tScaleVal, tScaleVal);
 
   // Quanto o rosto está de perfil: o eixo X vai de uma orelha à outra, então a
