@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Teste da mascara</title>
+<!--
+  Ferramenta de calibracao da mascara da cabeca SEM precisar de camera.
+  Reproduz a mesma matematica do script.js num rosto de referencia (fW=140).
+  Rode um servidor na raiz do projeto (node serve-root.js) e abra:
+    http://localhost:8000/dev/teste-mascara.html?rx=1.10&rz=1.00&yaw=35
+  Parametros: rx, ry, rz, frontGap via back, yaw, pitch, sz, debug=1, cabeca=1, clip=0
+-->
+<style>body{margin:0;background:#222}canvas{display:block}</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+// Reproduz a mesma matematica do script.js para um rosto de referencia,
+// sem depender de camera. Rosto: eMid na origem, eixos alinhados ao mundo.
+const REF_MODEL_WIDTH = 50;
+const CFG = { refHeadWidth: 140, refFaceHeight: 210, glassesScale: 2.98, glassesDepth: 0 };
+const fW = 140, fH = 210;
+const bS = 1.0;                       // rosto exatamente na distancia de referencia
+const tScaleVal = bS * CFG.glassesScale;
+
+const params = new URLSearchParams(location.search);
+const OCC = {
+  back: parseFloat(params.get('back') ?? '0.38'),
+  rx:   parseFloat(params.get('rx')   ?? '0.62'),
+  ry:   parseFloat(params.get('ry')   ?? '0.62'),
+  rz:   parseFloat(params.get('rz')   ?? '0.90'),
+  front:parseFloat(params.get('front')?? '0'),
+  debug: params.get('debug') === '1',
+};
+const yawDeg = parseFloat(params.get('yaw') ?? '0');
+const pitchDeg = parseFloat(params.get('pitch') ?? '0');
+
+const W = 520, H = 400;
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+renderer.setSize(W, H);
+renderer.localClippingEnabled = true;
+renderer.setClearColor(0x223344);
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.OrthographicCamera(-W/2, W/2, H/2, -H/2, 0.1, 5000);
+camera.position.set(0, 0, 500);
+const scene = new THREE.Scene();
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8888cc, 1.2));
+const key = new THREE.DirectionalLight(0xffffff, 1.2); key.position.set(0, 200, 300); scene.add(key);
+
+// Silhueta da cabeca so como referencia, e apenas quando pedida: no app a
+// cabeca e o VIDEO (2D), nao um objeto 3D, entao ela nao pode ocluir nada aqui.
+const head = new THREE.Mesh(
+  new THREE.SphereGeometry(1, 24, 16),
+  new THREE.MeshBasicMaterial({ color: 0x6688aa, wireframe: true, transparent: true, opacity: 0.25 })
+);
+head.scale.set(0.5 * fW, 0.62 * fH, 0.55 * fW);
+head.position.set(0, 0, -0.30 * fW);
+head.renderOrder = 2;
+if (params.get('cabeca') === '1') scene.add(head);
+
+const loader = new GLTFLoader();
+loader.load('../core/assets/models/square.glb', gltf => {
+  const clone = gltf.scene;
+  let maxDim = 0;
+  {
+    const b = new THREE.Box3().setFromObject(clone);
+    const s = new THREE.Vector3(); b.getSize(s);
+    maxDim = Math.max(s.x, s.y, s.z);
+  }
+  const normFactor = maxDim > 0 ? REF_MODEL_WIDTH / maxDim : 1;
+
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 1, side: THREE.DoubleSide });
+  const lensMat = new THREE.MeshPhysicalMaterial({ color: 0xffcc00, transparent: true, opacity: 0.6, roughness: 0.7, side: THREE.DoubleSide });
+  const meshes = [];
+  clone.traverse(c => { if (c.isMesh) { c.frustumCulled = false; meshes.push(c); } });
+  meshes.forEach((m, i) => {
+    m.material = (i === 0 && meshes.length > 1) ? lensMat : frameMat;
+    m.renderOrder = 1;
+    m.scale.z = parseFloat(params.get('sz') ?? '1.25');
+  });
+
+  const box = new THREE.Box3().setFromObject(clone);
+  const center = new THREE.Vector3(); box.getCenter(center);
+  const bSize = new THREE.Vector3(); box.getSize(bSize);
+  const centered = new THREE.Group();
+  centered.position.copy(center.clone().negate());
+  centered.add(clone);
+  const normGroup = new THREE.Group();
+  normGroup.scale.setScalar(normFactor);
+  normGroup.add(centered);
+  const wrapper = new THREE.Group();
+  wrapper.add(normGroup);
+
+  const depthHalf = bSize.z * 0.5 * normFactor;
+  const zOffset = -depthHalf * tScaleVal;   // adjDistance = 0, depAdj ~ 0
+
+  wrapper.scale.setScalar(tScaleVal);
+  wrapper.position.set(0, 0, zOffset);
+  scene.add(wrapper);
+
+  // mascara
+  const occ = new THREE.Mesh(
+    new THREE.SphereGeometry(1, 32, 24),
+    new THREE.MeshBasicMaterial(OCC.debug
+      ? { color: 0xff0033, transparent: true, opacity: 0.45 }
+      : { colorWrite: false })
+  );
+  occ.renderOrder = 0.5;
+  occ.position.set(0, 0, -OCC.back * fW);
+  occ.scale.set(OCC.rx * fW, OCC.ry * fH, OCC.rz * fW);
+  const plane = new THREE.Plane();
+  plane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 0, OCC.front * fW));
+  if (params.get('clip') !== '0') occ.material.clippingPlanes = [plane];
+  scene.add(occ);
+
+  // gira o "rosto" inteiro (oculos + cabeca + mascara) para simular yaw/pitch
+  const rig = new THREE.Group();
+  [wrapper, occ].concat(head.parent ? [head] : []).forEach(o => rig.add(o));
+  rig.rotation.y = THREE.MathUtils.degToRad(yawDeg);
+  rig.rotation.x = THREE.MathUtils.degToRad(pitchDeg);
+  scene.add(rig);
+
+  // o plano de corte precisa acompanhar a rotacao (no app ele e recalculado
+  // por frame a partir dos eixos do rosto)
+  rig.updateMatrixWorld(true);
+  const zAxis = new THREE.Vector3(0, 0, 1).applyQuaternion(rig.quaternion).normalize();
+  const point = new THREE.Vector3(0, 0, 0).applyMatrix4(rig.matrixWorld)
+    .addScaledVector(zAxis, OCC.front * fW);
+  plane.setFromNormalAndCoplanarPoint(zAxis.clone().negate(), point);
+
+  // mede a geometria final, em coordenadas de mundo
+  rig.updateMatrixWorld(true);
+  const wb = new THREE.Box3().setFromObject(wrapper);
+  const wsz = new THREE.Vector3(); wb.getSize(wsz);
+  console.log('MEDIDAS ' + JSON.stringify({
+    modeloBBox: [ +bSize.x.toFixed(1), +bSize.y.toFixed(1), +bSize.z.toFixed(1) ],
+    normFactor: +normFactor.toFixed(3),
+    depthHalf: +depthHalf.toFixed(1),
+    zOffset: +zOffset.toFixed(1),
+    oculosMundo: { min: [+wb.min.x.toFixed(0), +wb.min.y.toFixed(0), +wb.min.z.toFixed(0)],
+                   max: [+wb.max.x.toFixed(0), +wb.max.y.toFixed(0), +wb.max.z.toFixed(0)],
+                   tam: [+wsz.x.toFixed(0), +wsz.y.toFixed(0), +wsz.z.toFixed(0)] },
+    mascaraRaios: [ +(OCC.rx*fW).toFixed(0), +(OCC.ry*fH).toFixed(0), +(OCC.rz*fW).toFixed(0) ],
+    mascaraCentroZ: +(-OCC.back*fW).toFixed(0)
+  }));
+  renderer.render(scene, camera);
+  document.title = 'pronto';
+});
+</script>
+</body>
+</html>

@@ -82,21 +82,23 @@ let renderer, scene, camera;
 // que ficam atrás da cabeça quando o rosto gira. Ajustável ao vivo pelo console
 // via window.OCC (ex: OCC.debug = true; OCC.rz = 0.6).
 window.OCC = {
-  debug: false, // true = mostra a máscara em vermelho para ajuste visual
-  // A máscara precisa alcançar a PONTA das astes, senão a ponta escapa e fica
-  // flutuando atrás da orelha. Alcance para trás = (back + rz) x largura do rosto.
-  // Dá para ser generoso aqui porque o corte frontal (clip) impede que a máscara
-  // maior avance sobre a armação.
-  // Cuidado com o rx: sendo um elipsoide, a máscara fecha rápido nas laterais —
-  // justamente por onde as astes correm. Com rx baixo ela alcança longe no meio
-  // da cabeça e pouco na lateral, e a ponta da aste reaparece do lado do rosto.
-  // Uma cabeça real é mais cilíndrica ali, daí o rx generoso.
-  back: 0.38,   // deslocamento do centro para trás do rosto (x largura do rosto)
-  rx: 0.62,     // raio horizontal (x largura do rosto)
-  ry: 0.62,     // raio vertical (x altura do rosto)
-  rz: 0.90,     // raio de profundidade (x largura do rosto)
-  clip: true,   // corta a metade dianteira da máscara (ver updateOccluder)
-  front: 0.0,   // onde fica esse corte (x largura do rosto; + = mais à frente)
+  debug: false,    // true = mostra a máscara em vermelho para ajuste visual
+  // A máscara é um elipsoide SÓLIDO, posicionado de modo que a frente dele pare
+  // um pouco atrás da armação (frontGap): assim ela engole tudo o que passa pela
+  // cabeça sem nunca cobrir as lentes.
+  //
+  // NÃO cortar a máscara com plano: cortar deixa a malha aberta e, pelo buraco,
+  // a GPU não encontra superfície para escrever profundidade — a máscara para de
+  // ocluir justamente onde foi cortada. Era o que fazia as astes reaparecerem
+  // soltas ao lado do rosto quando a cabeça inclinava.
+  //
+  // O rx precisa ser generoso: sendo um elipsoide, a máscara fecha rápido nas
+  // laterais, que é justo por onde as astes correm. Cabeça real é mais cilíndrica
+  // ali. Valores conferidos em dev/teste-mascara.html (frente, yaw 35/60, pitch 30/40).
+  rx: 1.10,        // raio horizontal (x largura do rosto)
+  ry: 0.62,        // raio vertical (x altura do rosto)
+  rz: 1.00,        // raio de profundidade (x largura do rosto)
+  frontGap: 0.15,  // folga entre a frente da máscara e a armação (x largura do rosto)
 };
 
 // Suavização do rastreamento. Ajustável ao vivo pelo console (window.SMOOTH).
@@ -770,16 +772,9 @@ function createFaceSlot() {
   occluder.visible = false;
   scene.add(occluder);
 
-  // Cada rosto tem o seu plano de corte: os planos do Three.js são em
-  // coordenadas de mundo, então um plano compartilhado cortaria as máscaras das
-  // outras pessoas no lugar errado.
-  const clipPlane = new THREE.Plane();
-
   const slot = {
     glasses: buildFromModel(currentStyle, currentColor, currentLensColor, currentLensOpacity),
     occluder,
-    clipPlane,
-    clipPlanes: [clipPlane],
     motion: {
       readyPos: false,
       readyRot: false,
@@ -1097,7 +1092,11 @@ function updateOccluder(slot, f) {
   const O = window.OCC;
   const occluder = slot.occluder;
 
-  occluder.position.copy(f.eMid).addScaledVector(f.zAxis, -O.back * f.fW);
+  // Recuo do centro = raio de profundidade + folga. Assim a frente do elipsoide
+  // fica sempre frontGap x fW atrás do plano dos olhos, independentemente do
+  // tamanho da máscara: ela nunca alcança a armação, e não precisa ser cortada.
+  const back = (O.rz + O.frontGap) * f.fW;
+  occluder.position.copy(f.eMid).addScaledVector(f.zAxis, -back);
   occluder.quaternion.setFromRotationMatrix(
     new THREE.Matrix4().makeBasis(f.xAxis, f.yAxis, f.zAxis)
   );
@@ -1105,23 +1104,6 @@ function updateOccluder(slot, f) {
   occluder.visible = true;
 
   const m = occluder.material;
-
-  // A máscara só deve esconder o que está ATRÁS do rosto. Ela gira junto com a
-  // cabeça, então com a cabeça muito abaixada ou levantada o raio maior do
-  // elipsoide passa a apontar para a câmera, invade a frente do rosto e apaga as
-  // DUAS astes de uma vez. Cortar a metade dianteira resolve: o corte só reduz
-  // oclusão, nunca aumenta, então o giro lateral segue escondendo a aste oposta.
-  if (O.clip) {
-    const planePoint = f.eMid.clone().addScaledVector(f.zAxis, O.front * f.fW);
-    slot.clipPlane.setFromNormalAndCoplanarPoint(f.zAxis.clone().negate(), planePoint);
-    if (m.clippingPlanes !== slot.clipPlanes) {
-      m.clippingPlanes = slot.clipPlanes;
-      m.needsUpdate = true;
-    }
-  } else if (m.clippingPlanes && m.clippingPlanes.length) {
-    m.clippingPlanes = [];
-    m.needsUpdate = true;
-  }
 
   // Modo debug: pinta a máscara de vermelho para conferir posição e tamanho. Só
   // reconfigura quando o modo muda — needsUpdate por frame recompila o shader.
