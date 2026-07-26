@@ -287,12 +287,12 @@ function initMirror() {
     taaLevel: 2,
 
     branchFadingZ: -0.9,
-    branchFadingTransition: 2.0,
+    branchFadingTransition: 0.6,
     branchBendingAngle: 5,
     branchBendingZ: 0,
 
     debugLandmarks: false,
-    debugOccluder: false,
+    debugOccluder: false, // ligue pelo painel de ajuste (tecla T) em vez de mexer aqui
 
     solvePnPImgPointsLabels: [
       'leftEarBottom', 'rightEarBottom',
