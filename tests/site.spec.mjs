@@ -68,8 +68,9 @@ test.describe('Provador Virtual - Frontend', () => {
     await expect(distanceSlider).toBeAttached()
     await expect(heightSlider).toBeAttached()
 
+    // 0 = usar o recuo derivado da geometria do modelo; o slider é ajuste fino.
     const distValue = await distanceSlider.inputValue()
-    expect(Number(distValue)).toBe(-150)
+    expect(Number(distValue)).toBe(0)
 
     const heightValue = await heightSlider.inputValue()
     expect(Number(heightValue)).toBe(-10)

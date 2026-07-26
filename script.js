@@ -53,7 +53,11 @@ const CFG = {
   glassesDepth: 2,
   glassesDown: 2,
   glassesCenterX: 0,
-  glassesScale: 3.5,
+  // 2.98 = os 3.5 de antes x 0.85, que era o fator que o slider de distância
+  // aplicava na escala quando estava em -150. A escala não depende mais da
+  // distância (eram duas coisas diferentes acopladas), e o tamanho na tela
+  // continua o mesmo de antes.
+  glassesScale: 2.98,
 };
 
 const STYLE_CONFIG = {
@@ -79,12 +83,30 @@ let renderer, scene, camera;
 // via window.OCC (ex: OCC.debug = true; OCC.rz = 0.6).
 window.OCC = {
   debug: false, // true = mostra a máscara em vermelho para ajuste visual
-  back: 0.30,   // deslocamento do centro para trás do rosto (x largura do rosto)
+  // A máscara precisa alcançar a PONTA das astes, senão a ponta escapa e fica
+  // flutuando atrás da orelha. Alcance para trás = (back + rz) x largura do rosto.
+  // Dá para ser generoso aqui porque o corte frontal (clip) impede que a máscara
+  // maior avance sobre a armação.
+  back: 0.38,   // deslocamento do centro para trás do rosto (x largura do rosto)
   rx: 0.52,     // raio horizontal (x largura do rosto)
   ry: 0.62,     // raio vertical (x altura do rosto)
-  rz: 0.55,     // raio de profundidade (x largura do rosto)
+  rz: 0.75,     // raio de profundidade (x largura do rosto)
   clip: true,   // corta a metade dianteira da máscara (ver occFrontPlane)
   front: 0.0,   // onde fica esse corte (x largura do rosto; + = mais à frente)
+};
+
+// Suavização do rastreamento. Ajustável ao vivo pelo console (window.SMOOTH).
+// Valores MENORES = mais suave e mais tremor filtrado, porém com leve atraso;
+// MAIORES = mais colado no rosto, porém tremendo mais. Se ainda tremer, baixe
+// SMOOTH.pos e SMOOTH.rot; se parecer "arrastando", suba os dois.
+window.SMOOTH = {
+  pos: 0.22,       // posição: piso do fator por frame
+  scale: 0.15,     // escala: mais lenta ainda, o tamanho quase não muda
+  posMax: 0.65,    // teto quando a pessoa se move rápido
+  posBoost: 0.02,  // quanto o movimento acelera a resposta
+  rot: 0.25,       // rotação: piso
+  rotMax: 0.70,    // rotação: teto
+  rotBoost: 0.9,
 };
 
 // Limiares dos gestos de mão. Ajustáveis ao vivo pelo console (window.GEST),
@@ -139,7 +161,10 @@ function releaseColorStrip() {
 let adjHeight = -10;
 const adjRotation = 0;
 const adjLateral = 0;
-let adjDistance = -150;
+// Ajuste fino em torno do recuo correto, que agora vem da geometria do modelo.
+// Era -150 (o recuo inteiro, fixo em pixels), o que desalinhava os óculos ao
+// inclinar a cabeça — ver o cálculo de zOffset em runPrediction.
+let adjDistance = 0;
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 function qDelta(a, b) { return 2 * Math.acos(clamp(Math.abs(a.dot(b)), 0, 1)); }
@@ -709,6 +734,9 @@ function buildFromModel(style, frameColor, lensColor, lensOpacity) {
   const bSize = new THREE.Vector3();
   box.getSize(bSize);
   wrapper.userData.templeLen = bSize.z * 0.5;
+  // Metade da profundidade do modelo, já em unidades normalizadas: é o recuo
+  // que põe as lentes sobre os olhos (ver o cálculo de zOffset em runPrediction).
+  wrapper.userData.depthHalf = bSize.z * 0.5 * normFactor;
   wrapper.userData.halfW = bSize.x * 0.5;
   wrapper.userData.halfH = bSize.y * 0.5;
   wrapper.userData.leftTempleMesh = splitLeftMesh;
@@ -1033,14 +1061,27 @@ function runPrediction() {
       const noseDepth = (nTip.z - nose.z) / Math.max(fW, 1);
       const depAdj = clamp(noseDepth * CFG.refHeadWidth * 0.06, -1, 3);
 
-      const zOffset = (CFG.glassesDepth + depAdj + adjDistance) * fwNorm;
+      const tScaleVal = bS * CFG.glassesScale;
+      const tScale = new THREE.Vector3(tScaleVal, tScaleVal, tScaleVal);
+
+      // O wrapper do modelo é centrado no meio da armação, e as astes ocupam
+      // toda a metade de trás. Para as LENTES caírem sobre os olhos, o centro
+      // precisa recuar metade da profundidade do modelo — na escala em que ele
+      // está sendo desenhado agora.
+      //
+      // Antes esse recuo era um valor fixo em pixels (adjDistance = -150), o que
+      // criava um braço de alavanca ao longo do eixo do nariz: como esse eixo
+      // gira junto com a cabeça, inclinar para baixo jogava os óculos para a
+      // testa e inclinar para cima jogava para o queixo, além de multiplicar o
+      // ruído do rastreamento. Derivando do modelo, o recuo é o mínimo
+      // necessário e acompanha o tamanho do rosto.
+      const depthHalf = (glassesGroup.userData && glassesGroup.userData.depthHalf) || 0;
+      const zOffset = -depthHalf * tScaleVal + (CFG.glassesDepth + depAdj + adjDistance) * fwNorm;
+
       const tPos = eMid.clone()
         .addScaledVector(xAxis, sc.centerX + adjLateral)
         .addScaledVector(yAxis, adjHeight)
         .addScaledVector(zAxis, zOffset);
-
-      const tScaleVal = bS * CFG.glassesScale * (1 + adjDistance * 0.001);
-      const tScale = new THREE.Vector3(tScaleVal, tScaleVal, tScaleVal);
 
       let rotMat = new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis);
       if (adjRotation !== 0) {
@@ -1076,8 +1117,14 @@ function runPrediction() {
       const mov = avgPos.distanceTo(smooth.prev);
       smooth.prev.copy(avgPos);
 
-      const aP = clamp(0.97 + mov * 0.02, 0.97, 0.99);
-      const aS = clamp(0.96 + mov * 0.03, 0.96, 0.99);
+      // O fator do lerp é quanto do caminho até o alvo se percorre por frame:
+      // 1.0 = pula direto (nenhum filtro), valores baixos = mais suave. Estava em
+      // 0.97, ou seja praticamente sem filtro, e todo o tremor do rastreamento
+      // aparecia na tela. A base baixa segura o tremor parado; o termo de
+      // movimento devolve a resposta rápida quando a pessoa realmente se mexe.
+      const S = window.SMOOTH;
+      const aP = clamp(S.pos + mov * S.posBoost, S.pos, S.posMax);
+      const aS = clamp(S.scale + mov * S.posBoost, S.scale, S.posMax);
 
       if (!smooth.readyPos) {
         smooth.pos.copy(avgPos);
@@ -1093,7 +1140,7 @@ function runPrediction() {
         smooth.readyRot = true;
       } else {
         const aR = qDelta(smooth.quat, targetQuat);
-        smooth.quat.slerp(targetQuat, clamp(0.88 + aR * 1.1, 0.88, 0.99));
+        smooth.quat.slerp(targetQuat, clamp(S.rot + aR * S.rotBoost, S.rot, S.rotMax));
       }
 
       const fi = document.getElementById('face-info');
