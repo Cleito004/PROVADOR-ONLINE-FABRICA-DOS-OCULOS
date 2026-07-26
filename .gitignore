@@ -73,3 +73,8 @@ opencv-backend/__pycache__/
 openrouter.ts
 server.cjs
 uploads_files_*
+
+# Copia local do kiosk dentro do next-app: o Next so serve estaticos de
+# public/, entao esta pasta nao e acessivel onde esta. O kiosk oficial e o da
+# raiz (kiosk/), servido por serve-kiosk.js.
+next-app/kiosk/
