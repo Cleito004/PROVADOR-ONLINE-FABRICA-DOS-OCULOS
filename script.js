@@ -87,10 +87,14 @@ window.OCC = {
   // flutuando atrás da orelha. Alcance para trás = (back + rz) x largura do rosto.
   // Dá para ser generoso aqui porque o corte frontal (clip) impede que a máscara
   // maior avance sobre a armação.
+  // Cuidado com o rx: sendo um elipsoide, a máscara fecha rápido nas laterais —
+  // justamente por onde as astes correm. Com rx baixo ela alcança longe no meio
+  // da cabeça e pouco na lateral, e a ponta da aste reaparece do lado do rosto.
+  // Uma cabeça real é mais cilíndrica ali, daí o rx generoso.
   back: 0.38,   // deslocamento do centro para trás do rosto (x largura do rosto)
-  rx: 0.52,     // raio horizontal (x largura do rosto)
+  rx: 0.62,     // raio horizontal (x largura do rosto)
   ry: 0.62,     // raio vertical (x altura do rosto)
-  rz: 0.75,     // raio de profundidade (x largura do rosto)
+  rz: 0.90,     // raio de profundidade (x largura do rosto)
   clip: true,   // corta a metade dianteira da máscara (ver updateOccluder)
   front: 0.0,   // onde fica esse corte (x largura do rosto; + = mais à frente)
 };
@@ -107,6 +111,13 @@ window.SMOOTH = {
   rot: 0.25,       // rotação: piso
   rotMax: 0.70,    // rotação: teto
   rotBoost: 0.9,
+  // Zona morta: variação menor que isto é considerada ruído do rastreamento e
+  // simplesmente ignorada, o que trava os óculos no rosto com a pessoa parada.
+  // Filtrar mais (baixar pos/rot) resolveria o tremor, mas ao custo de atraso
+  // quando a pessoa realmente se mexe; a zona morta não cobra esse preço.
+  // Se o movimento lento começar a andar "em degraus", é sinal de que está alta.
+  deadZone: 0.02,     // fração da largura do rosto (~3 px num rosto de 140 px)
+  deadZoneRot: 0.01,  // radianos (~0,6 grau)
 };
 
 // Limiares dos gestos de mão. Ajustáveis ao vivo pelo console (window.GEST),
@@ -1182,7 +1193,12 @@ function updateSlotFromFace(slot, f) {
     m.scale.copy(tScale);
     m.readyPos = true;
   } else {
-    m.pos.lerp(tPos, aP);
+    // A comparação é contra a posição já suavizada, não contra o alvo do frame
+    // anterior: assim uma sequência de passos pequenos no mesmo sentido não vai
+    // acumulando deriva por ficar sempre logo abaixo do limiar.
+    if (tPos.distanceTo(m.pos) > S.deadZone * f.fW) {
+      m.pos.lerp(tPos, aP);
+    }
     m.scale.lerp(tScale, aS);
   }
 
@@ -1191,7 +1207,9 @@ function updateSlotFromFace(slot, f) {
     m.readyRot = true;
   } else {
     const aR = qDelta(m.quat, targetQuat);
-    m.quat.slerp(targetQuat, clamp(S.rot + aR * S.rotBoost, S.rot, S.rotMax));
+    if (aR > S.deadZoneRot) {
+      m.quat.slerp(targetQuat, clamp(S.rot + aR * S.rotBoost, S.rot, S.rotMax));
+    }
   }
 
   slot.glasses.position.copy(m.pos);
