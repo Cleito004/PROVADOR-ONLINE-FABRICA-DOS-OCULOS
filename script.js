@@ -101,6 +101,19 @@ window.OCC = {
   frontGap: 0.15,  // folga entre a frente da máscara e a armação (x largura do rosto)
 };
 
+// Aste do lado que o rosto mostra. O modelo tem astes curtas, e a máscara da
+// cabeça ainda engole parte delas, então de perfil sobra um toco pequeno. Aqui a
+// aste virada para a câmera é revelada (deixa de ser ocultada pela máscara) e
+// cresce conforme o rosto gira, ficando parecida com um óculos de verdade.
+// A aste oposta nunca muda: continua escondida atrás da cabeça.
+// O crescimento é gradual; a volta é imediata, como pedido.
+window.TEMPLE = {
+  enabled: true,
+  growth: 0.9,     // quanto a aste chega a crescer, de perfil (0.9 = +90%)
+  rise: 0.12,      // velocidade do crescimento por frame (menor = mais suave)
+  yawStart: 0.20,  // a partir de quanto de giro a aste começa a crescer (seno do yaw)
+};
+
 // Suavização do rastreamento. Ajustável ao vivo pelo console (window.SMOOTH).
 // Valores MENORES = mais suave e mais tremor filtrado, porém com leve atraso;
 // MAIORES = mais colado no rosto, porém tremendo mais. Se ainda tremer, baixe
@@ -706,7 +719,6 @@ function buildFromModel(style, frameColor, lensColor, lensOpacity) {
   // Three.js são em coordenadas de MUNDO, não do modelo, então eles cortavam num
   // ponto fixo da cena — e com mais de uma pessoa cortariam no lugar errado.
   // Quem esconde a aste hoje é a máscara da cabeça (ver updateOccluder).
-  void splitLeftZ; void splitRightZ;
 
   const frameMats = [];
   clone.traverse(c => {
@@ -745,6 +757,12 @@ function buildFromModel(style, frameColor, lensColor, lensOpacity) {
   wrapper.userData.halfH = bSize.y * 0.5;
   wrapper.userData.leftTempleMesh = splitLeftMesh;
   wrapper.userData.rightTempleMesh = splitRightMesh;
+  // Z da dobradiça de cada aste (a extremidade da frente): é o ponto que fica
+  // parado quando a aste cresce, para ela não descolar da armação.
+  wrapper.userData.leftHingeZ = splitLeftZ ? splitLeftZ.maxZ : 0;
+  wrapper.userData.rightHingeZ = splitRightZ ? splitRightZ.maxZ : 0;
+  // Estado do crescimento, por aste (ver applyTempleReveal).
+  wrapper.userData.templeGrow = { left: 1, right: 1 };
   wrapper.add(normGroup);
   return wrapper;
 }
@@ -1123,6 +1141,45 @@ function updateOccluder(slot, f) {
   }
 }
 
+// Revela e alonga a aste do lado que o rosto está mostrando.
+// Qual lado aparece: o eixo X do rosto aponta de uma orelha para a outra, então
+// o sinal de xAxis.z diz qual das duas está virada para a câmera; o módulo é o
+// seno do giro, ou seja o quanto o rosto está de perfil.
+function applyTempleReveal(slot, f) {
+  const T = window.TEMPLE;
+  const ud = slot.glasses.userData;
+  const left = ud.leftTempleMesh;
+  const right = ud.rightTempleMesh;
+  // Só funciona quando o modelo pôde ser separado em armação + duas astes.
+  if (!T.enabled || !left || !right || !ud.templeGrow) return;
+
+  const sin = clamp(f.xAxis.z, -1, 1);
+  const amount = clamp((Math.abs(sin) - T.yawStart) / (1 - T.yawStart), 0, 1);
+  const frente = sin < 0 ? 'left' : 'right';
+
+  [['left', left, ud.leftHingeZ], ['right', right, ud.rightHingeZ]].forEach(([lado, mesh, hingeZ]) => {
+    const alvo = (lado === frente) ? 1 + T.growth * amount : 1;
+    const atual = ud.templeGrow[lado];
+
+    // Cresce aos poucos, encolhe de uma vez.
+    ud.templeGrow[lado] = alvo > atual ? atual + (alvo - atual) * T.rise : alvo;
+
+    const s = ud.templeGrow[lado];
+    mesh.scale.z = s;
+    // Mantém a dobradiça parada enquanto o resto da aste estica para trás.
+    mesh.position.z = hingeZ * (1 - s);
+
+    // A aste que está à mostra passa por cima da máscara da cabeça; a outra
+    // continua sujeita a ela, e é isso que a mantém escondida atrás do rosto.
+    const revelar = (lado === frente) && amount > 0;
+    if (mesh.material.depthTest === revelar) {
+      mesh.material.depthTest = !revelar;
+      mesh.material.needsUpdate = true;
+    }
+    mesh.renderOrder = revelar ? 2 : 1;
+  });
+}
+
 function updateSlotFromFace(slot, f) {
   const sc = STYLE_CONFIG[currentStyle] || STYLE_CONFIG.square;
 
@@ -1203,6 +1260,7 @@ function updateSlotFromFace(slot, f) {
   slot.anchor.copy(f.eMid);
   slot.inUse = true;
 
+  applyTempleReveal(slot, f);
   updateOccluder(slot, f);
 }
 

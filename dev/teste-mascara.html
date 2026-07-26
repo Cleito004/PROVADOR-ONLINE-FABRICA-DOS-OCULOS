@@ -88,6 +88,26 @@ loader.load('../core/assets/models/square.glb', gltf => {
     m.scale.z = parseFloat(params.get('sz') ?? '1.25');
   });
 
+  // dobra a ponta das astes para dentro (aproxima da cabeca)
+  const bend = parseFloat(params.get('bend') ?? '0');
+  if (bend > 0) {
+    const bb = new THREE.Box3().setFromObject(clone);
+    const zMin = bb.min.z, zMax = bb.max.z;
+    const hinge = zMax - (zMax - zMin) * 0.35;   // dobradica ~35% a partir da frente
+    meshes.forEach(m => {
+      const pos = m.geometry.getAttribute('position');
+      for (let i = 0; i < pos.count; i++) {
+        const z = pos.getZ(i) * m.scale.z;
+        if (z < hinge) {
+          const t = Math.min((hinge - z) / Math.max(hinge - zMin, 1e-6), 1);
+          pos.setX(i, pos.getX(i) * (1 - bend * t));
+        }
+      }
+      pos.needsUpdate = true;
+      m.geometry.computeVertexNormals();
+    });
+  }
+
   const box = new THREE.Box3().setFromObject(clone);
   const center = new THREE.Vector3(); box.getCenter(center);
   const bSize = new THREE.Vector3(); box.getSize(bSize);

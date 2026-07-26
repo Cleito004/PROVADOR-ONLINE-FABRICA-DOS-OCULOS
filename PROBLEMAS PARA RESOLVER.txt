@@ -1,41 +1,61 @@
-a barra rgb precisa mostrar quado todos os dedos estivrem abaixcados e não quando o dedão(polegar estiver) esticado  ✅ 26/07 v4.21.0
-erro de posição do óculos conforme a distÂncia  ✅ 26/07 v4.21.0
-a aprtir de um certo angulo a aste oposta some  ✅
-quando a cabeça está completamente abaixada ou levantada as 2 astes somem  ✅ 26/07 v4.21.0
-a cor da lente escolhida some quando retiramos as mãos  ✅ 26/07 v4.21.0
-garantir com que os movimentos apresentados no on bording sejam possíveis no projeto  ✅ 26/07 (onboarding_new3.pdf)
-mais de uma pessoa poder utilizar o provador  --> PENDENTE
+a aprtir de um certo angulo a aste oposta some  ✅ 26/07 v4.24.0 (confirmado na camera)
+quando a cabeça está completamente abaixada ou levantada as 2 astes somem  ✅ 26/07 v4.24.0 (confirmado na camera)
+
+a causa real era a mascara ficar OCA: o plano de corte deixava a malha aberta e
+pela abertura ela parava de ocluir. Agora a mascara e solida e recuada, e a
+frente dela para sempre um pouco atras da armacao (OCC.frontGap).
+
+
+mais de uma pessoa poder utilizar o provador  --> FEITO em v4.23.0, FALTA TESTAR
+   ate 4 rostos ao mesmo tempo, cada um com seus oculos e sua mascara.
+   testar: duas pessoas juntas, se movendo e se cruzando, e conferir se os
+   oculos ficam grudados na pessoa certa (sem trocar de dono).
 
 
 -------------------------------------------------------------------
 AINDA EM ABERTO
 -------------------------------------------------------------------
 
-1) mais de uma pessoa poder utilizar o provador ao mesmo tempo
-   hoje o script.js usa numFaces: 1 e um unico conjunto oculos + occluder +
-   suavizacao. para N pessoas: um conjunto por rosto.
+1) MODO VITRINE (o que falta para 6 de agosto)
+   a tela fica atras do vidro, ninguem toca. falta:
+   - abrir em tela cheia sozinho, sem cursor do mouse aparecendo
+   - se voltar a funcionar sozinho se a camera falhar ou a pagina travar
+   - decidir onde roda: PC local na loja (recomendado, camera funciona em
+     localhost sem certificado e nao depende de internet) ou pelo site publicado
 
 2) kiosk: a mascara (occluder) tapa a armacao
-   investigacao anterior, nao concluida. use o painel de ajuste (tecla T ou
-   ?ajuste=1) e va reduzindo OCC.scale / OCC.z ate a armacao aparecer.
+   ficou de fora: para a vitrine escolhemos o provador da raiz, porque o kiosk
+   depende de toque (clicar na vitrine e nos botoes) e a tela fica atras do vidro.
+
+3) testar com crianca de verdade
+   a escala ja acompanha o tamanho do rosto, entao nao deve ficar grande demais,
+   mas as proporcoes de rosto infantil so dao para conferir na pratica.
 
 
 -------------------------------------------------------------------
-FALTA VALIDAR NA CAMERA (os ✅ de 26/07 foram testados so por codigo)
+AJUSTE AO VIVO PELO CONSOLE (F12), sem recarregar nem republicar
 -------------------------------------------------------------------
 
-- 1/2/3 dedos trocam a lente so depois de ~0,8s parado, com a barrinha enchendo
-- abrir a mao (4 dedos) trava a escolha; tirar a mao da tela nao muda mais nada
-- punho fechado com o polegar recolhido abre a barra rgb; polegar esticado nao
-- 1/2/3 dedos da outra mao trocam o modelo, do mesmo jeito
-- aproximar e afastar o rosto sem os oculos escorregarem
-- cabeca totalmente para cima / para baixo sem as 2 astes sumirem
-
-ajuste ao vivo pelo console, sem recarregar a pagina:
+GESTOS
   GEST.debug = true    mostra punho / polegar / dedos na tela
-  GEST.holdMs          tempo do gesto (800)
+  GEST.holdMs          tempo que o gesto fica parado para valer (800)
   GEST.thumbTuck       quando o polegar conta como recolhido (0.95)
   GEST.fingerCurl      quando o dedo conta como abaixado (1.05)
-  GEST.edgeMargin      borda do quadro ignorada (0.02)
-  OCC.debug = true     mostra a mascara da cabeca
-  OCC.clip / OCC.front corte da mascara (astes no pitch)
+  GEST.edgeMargin      borda do quadro onde a mao e ignorada (0.02)
+
+MASCARA DA CABECA
+  OCC.debug = true     pinta a mascara de vermelho
+  OCC.rx               raio horizontal (1.10) - aumente se escapar ponta de aste
+  OCC.rz               raio de profundidade (1.00)
+  OCC.frontGap         folga entre a mascara e a armacao (0.15)
+                       aumente se a mascara comer a borda da lente
+
+TREMOR
+  SMOOTH.deadZone      ignora tremor abaixo disso (0.02)
+                       sobe = mais firme parado / desce = menos "degraus" ao mexer
+  SMOOTH.pos           suavidade da posicao (0.22)
+  SMOOTH.rot           suavidade da rotacao (0.25)
+
+CALIBRAR A MASCARA SEM CAMERA
+  node serve-root.js  e abrir:
+  http://localhost:8000/dev/teste-mascara.html?rx=1.10&rz=1.00&pitch=-30&debug=1
