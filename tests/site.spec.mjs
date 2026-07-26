@@ -89,6 +89,16 @@ test.describe('Provador Virtual - Frontend', () => {
     await expect(page.locator('#hand-gesture-status')).toBeAttached()
   })
 
+  test('feedback de progresso do gesto existe e comeca escondido', async ({ page }) => {
+    await page.goto(BASE, { waitUntil: 'domcontentloaded' })
+
+    const dwell = page.locator('#gesture-dwell')
+    await expect(dwell).toBeAttached()
+    await expect(dwell).not.toHaveClass(/show/)
+    await expect(page.locator('#gesture-dwell-label')).toBeAttached()
+    await expect(page.locator('#gesture-dwell-fill')).toBeAttached()
+  })
+
   test('video webcam existe', async ({ page }) => {
     await page.goto(BASE, { waitUntil: 'domcontentloaded' })
 

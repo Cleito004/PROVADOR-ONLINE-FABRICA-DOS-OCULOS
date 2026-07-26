@@ -285,6 +285,44 @@ main {
 }
 #hand-gesture-status.show { opacity: 1; }
 
+/* ── Progresso do gesto (dwell) ──────────────────── */
+/* Fica logo acima da faixa de cores para não disputar espaço com ela. */
+#gesture-dwell {
+  position: absolute;
+  bottom: 84px;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 180px;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(8px);
+  padding: 8px 16px 10px;
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--text);
+  text-align: center;
+  z-index: 9;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+#gesture-dwell.show { opacity: 1; }
+
+#gesture-dwell-bar {
+  margin-top: 7px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.15);
+  overflow: hidden;
+}
+
+#gesture-dwell-fill {
+  width: 0%;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--primary);
+  transition: width 0.08s linear;
+}
+
 /* Scan overlay */
 #scan-overlay {
   position: absolute;

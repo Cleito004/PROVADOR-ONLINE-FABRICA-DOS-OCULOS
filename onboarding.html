@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Guia do Provador Virtual - Fábrica dos Óculos</title>
+<style>
+  @page {
+    size: 1122px 793px;
+    margin: 0;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', 'Arial Rounded MT Bold', Arial, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #2d3436;
+    width: 1122px;
+    height: 793px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .page {
+    width: 1122px;
+    height: 793px;
+    padding: 14px 32px 10px;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  }
+
+  /* ===== HEADER ===== */
+  .header {
+    text-align: center;
+    margin-bottom: 8px;
+  }
+  .header h1 {
+    font-size: 30px;
+    color: #fff;
+    text-shadow: 2px 2px 8px rgba(0,0,0,0.3);
+    letter-spacing: 1px;
+    margin-bottom: 2px;
+  }
+  .header .subtitle {
+    font-size: 14px;
+    color: rgba(255,255,255,0.9);
+    font-weight: 400;
+  }
+
+  /* ===== SECTION TITLE ===== */
+  .section-title {
+    font-size: 15px;
+    color: #fff;
+    background: rgba(0,0,0,0.25);
+    display: inline-block;
+    padding: 3px 16px;
+    border-radius: 20px;
+    margin-bottom: 8px;
+    font-weight: 700;
+  }
+
+  /* ===== GESTURE CARDS ===== */
+  .gestures-row {
+    display: flex;
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+  .gesture-card {
+    flex: 1;
+    border-radius: 16px;
+    padding: 12px 12px 10px;
+    text-align: center;
+    position: relative;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.2);
+    overflow: hidden;
+  }
+  .gesture-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 4px;
+    border-radius: 14px 14px 0 0;
+  }
+  .gesture-card.red { background: linear-gradient(180deg, #fff5f5 0%, #fff 100%); }
+  .gesture-card.red::before { background: #FF4757; }
+  .gesture-card.blue { background: linear-gradient(180deg, #f0f3ff 0%, #fff 100%); }
+  .gesture-card.blue::before { background: #3742FA; }
+  .gesture-card.green { background: linear-gradient(180deg, #f0fff4 0%, #fff 100%); }
+  .gesture-card.green::before { background: #2ED573; }
+  .gesture-card.yellow { background: linear-gradient(180deg, #fffdf0 0%, #fff 100%); }
+  .gesture-card.yellow::before { background: #FFA502; }
+
+  .gesture-card .hand-emoji {
+    font-size: 48px;
+    line-height: 1;
+    margin-bottom: 4px;
+    display: block;
+  }
+  /* Três dedos em sequência: mostra que o gesto é contar, não um número fixo */
+  .gesture-card .hand-emoji.count {
+    font-size: 34px;
+    letter-spacing: -2px;
+    padding: 7px 0;
+  }
+  .gesture-card .gesture-name {
+    font-size: 14px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+  }
+  .gesture-card.red .gesture-name { color: #FF4757; }
+  .gesture-card.blue .gesture-name { color: #3742FA; }
+  .gesture-card.green .gesture-name { color: #2ED573; }
+  .gesture-card.yellow .gesture-name { color: #E67E22; }
+
+  .gesture-card .hand-label {
+    font-size: 11px;
+    color: #636e72;
+    font-weight: 600;
+    margin-bottom: 3px;
+    text-transform: uppercase;
+  }
+  .gesture-card .action-box {
+    background: rgba(0,0,0,0.05);
+    border-radius: 8px;
+    padding: 5px 8px;
+    margin-top: 4px;
+  }
+  .gesture-card .action-icon {
+    font-size: 22px;
+    display: block;
+    margin-bottom: 1px;
+  }
+  .gesture-card .action-text {
+    font-size: 12px;
+    font-weight: 700;
+    color: #2d3436;
+    line-height: 1.2;
+  }
+  .gesture-card .action-desc {
+    font-size: 10px;
+    color: #636e72;
+    margin-top: 2px;
+    line-height: 1.3;
+  }
+  .gesture-card .arrow-hint {
+    font-size: 20px;
+    color: #b2bec3;
+    margin: 2px 0;
+    display: block;
+  }
+
+  /* ===== FINGER MAP — GRANDE ===== */
+  .finger-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .finger-section .section-title {
+    margin-bottom: 10px;
+  }
+  .finger-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 12px 20px 14px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.15);
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .finger-cols {
+    display: flex;
+    gap: 22px;
+  }
+  .finger-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+  .finger-col h3 {
+    font-size: 13px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #636e72;
+    padding-bottom: 4px;
+    border-bottom: 2px solid #dfe6e9;
+  }
+  .finger-note {
+    margin-top: 12px;
+    text-align: center;
+    font-size: 12px;
+    color: #636e72;
+    background: #fffdf0;
+    border: 2px solid #ffeaa7;
+    border-radius: 10px;
+    padding: 7px 12px;
+  }
+  .finger-note strong { color: #E67E22; }
+  .finger-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-radius: 12px;
+    background: #f0fff4;
+    border: 2px solid #dfe6e9;
+  }
+  .finger-item .fingers {
+    font-size: 40px;
+    line-height: 1;
+  }
+  .finger-item .f-info {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .finger-item .f-count {
+    font-size: 15px;
+    font-weight: 800;
+    color: #2d3436;
+  }
+  .finger-item .f-color {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #636e72;
+  }
+  .color-dot {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: inline-block;
+    border: 2px solid rgba(0,0,0,0.1);
+    flex-shrink: 0;
+  }
+
+  /* ===== FOOTER ===== */
+  .footer {
+    text-align: center;
+    margin-top: 10px;
+  }
+  .footer .tip {
+    font-size: 11px;
+    color: rgba(255,255,255,0.85);
+    background: rgba(0,0,0,0.2);
+    display: inline-block;
+    padding: 4px 18px;
+    border-radius: 20px;
+    font-weight: 500;
+  }
+  .footer .tip strong {
+    color: #fff;
+  }
+
+  /* ===== DECORATION ===== */
+  .bg-circle {
+    position: absolute;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.06);
+    pointer-events: none;
+  }
+  .bg-circle.c1 { width: 200px; height: 200px; top: -60px; right: -40px; }
+  .bg-circle.c2 { width: 150px; height: 150px; bottom: -40px; left: -30px; }
+
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .page { width: 100%; height: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="bg-circle c1"></div>
+<div class="bg-circle c2"></div>
+
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="header">
+    <h1>Guia do Provador Virtual de Óculos</h1>
+    <div class="subtitle">Aprenda a usar os gestos da mão para personalizar seus óculos!</div>
+  </div>
+
+  <!-- SECTION: GESTOS -->
+  <div class="section-title">✋ Gestos com as Mãos</div>
+
+  <div class="gestures-row">
+    <!-- Card 1: Punho fechado -->
+    <div class="gesture-card red">
+      <span class="hand-emoji">✊</span>
+      <div class="hand-label">Mão Direita</div>
+      <div class="gesture-name">Punho Fechado</div>
+      <div class="arrow-hint">⬅️ ➡️</div>
+      <div class="action-box">
+        <span class="action-icon">🎨</span>
+        <div class="action-text">Mudar Cor da Armação</div>
+        <div class="action-desc">Feche a mão toda, até o polegar, e arraste para os lados. A faixa de cores aparece na tela.</div>
+      </div>
+    </div>
+
+    <!-- Card 2: Dedos da mão direita -->
+    <div class="gesture-card blue">
+      <span class="hand-emoji count">☝️✌️🤟</span>
+      <div class="hand-label">Mão Direita</div>
+      <div class="gesture-name">Contar Dedos</div>
+      <div class="action-box">
+        <span class="action-icon">👓</span>
+        <div class="action-text">Trocar o Modelo</div>
+        <div class="action-desc">Mostre 1, 2 ou 3 dedos e segure. Veja o mapa dos dedos abaixo.</div>
+      </div>
+    </div>
+
+    <!-- Card 3: Dedos da mão esquerda -->
+    <div class="gesture-card green">
+      <span class="hand-emoji count">☝️✌️🤟</span>
+      <div class="hand-label">Mão Esquerda</div>
+      <div class="gesture-name">Contar Dedos</div>
+      <div class="action-box">
+        <span class="action-icon">🕶️</span>
+        <div class="action-text">Mudar Cor da Lente</div>
+        <div class="action-desc">Mostre 1, 2 ou 3 dedos e segure. Veja o mapa dos dedos abaixo.</div>
+      </div>
+    </div>
+
+    <!-- Card 4: Mão aberta = travar -->
+    <div class="gesture-card yellow">
+      <span class="hand-emoji">🖐️</span>
+      <div class="hand-label">Qualquer Mão</div>
+      <div class="gesture-name">Mão Aberta</div>
+      <div class="action-box">
+        <span class="action-icon">🔒</span>
+        <div class="action-text">Travar a Escolha</div>
+        <div class="action-desc">Abra a mão inteira para parar de trocar. Agora pode tirar a mão da tela: a escolha fica.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FINGER MAP — SEÇÃO GRANDE -->
+  <div class="finger-section">
+    <div class="section-title">🖐️ Mapa dos Dedos</div>
+    <div class="finger-card">
+      <div class="finger-cols">
+
+        <div class="finger-col">
+          <h3>✋ Mão Esquerda — Cor da Lente</h3>
+          <div class="finger-item">
+            <span class="fingers">☝️</span>
+            <div class="f-info">
+              <span class="f-count">1 Dedo</span>
+              <span class="f-color"><span class="color-dot" style="background:#1a1a2e;"></span> Lente Preta</span>
+            </div>
+          </div>
+          <div class="finger-item">
+            <span class="fingers">✌️</span>
+            <div class="f-info">
+              <span class="f-count">2 Dedos</span>
+              <span class="f-color"><span class="color-dot" style="background:rgba(200,220,255,0.5); border-color:#aaa;"></span> Lente Transparente</span>
+            </div>
+          </div>
+          <div class="finger-item">
+            <span class="fingers">🤟</span>
+            <div class="f-info">
+              <span class="f-count">3 Dedos</span>
+              <span class="f-color"><span class="color-dot" style="background:#f9ca24;"></span> Lente Amarela</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="finger-col">
+          <h3>🤚 Mão Direita — Modelo do Óculos</h3>
+          <div class="finger-item">
+            <span class="fingers">☝️</span>
+            <div class="f-info">
+              <span class="f-count">1 Dedo</span>
+              <span class="f-color">👓 Quadrado</span>
+            </div>
+          </div>
+          <div class="finger-item">
+            <span class="fingers">✌️</span>
+            <div class="f-info">
+              <span class="f-count">2 Dedos</span>
+              <span class="f-color">👓 Aviador</span>
+            </div>
+          </div>
+          <div class="finger-item">
+            <span class="fingers">🤟</span>
+            <div class="f-info">
+              <span class="f-count">3 Dedos</span>
+              <span class="f-color">👓 Gatinho</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <div class="finger-note">
+        🖐️ <strong>Mão aberta (4 dedos) trava a escolha</strong> — use antes de tirar a mão da tela.
+        Mão fechada ou fora do quadro não muda nada.
+      </div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <div class="tip">💡 <strong>Dica:</strong> Segure o gesto parado por cerca de 1 segundo — a barrinha na tela mostra o progresso. A imagem é espelhada, como um espelho de verdade.</div>
+  </div>
+
+</div>
+</body>
+</html>

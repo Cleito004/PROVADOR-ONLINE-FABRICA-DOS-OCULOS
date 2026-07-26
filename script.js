@@ -42,6 +42,9 @@ const FRAME_COLORS_RAINBOW = [
 
 const STYLES = ['square', 'aviator', 'cateye'];
 
+// Rótulos em português, para os avisos na tela combinarem com o #style-matrix.
+const STYLE_LABELS = { square: 'Quadrado', aviator: 'Aviador', cateye: 'Gatinho' };
+
 const REF_MODEL_WIDTH = 50;
 
 const CFG = {
@@ -63,6 +66,10 @@ let faceLandmarker;
 let handLandmarker;
 let glassesGroup;
 let occluder = null;
+// Plano que corta a metade dianteira da máscara da cabeça, atualizado por frame
+// (ver o bloco do occluder em runPrediction). Em coordenadas de mundo.
+const occFrontPlane = new THREE.Plane();
+const occClipPlanes = [occFrontPlane];
 let videoTexture;
 let videoSprite;
 let renderer, scene, camera;
@@ -76,6 +83,18 @@ window.OCC = {
   rx: 0.52,     // raio horizontal (x largura do rosto)
   ry: 0.62,     // raio vertical (x altura do rosto)
   rz: 0.55,     // raio de profundidade (x largura do rosto)
+  clip: true,   // corta a metade dianteira da máscara (ver occFrontPlane)
+  front: 0.0,   // onde fica esse corte (x largura do rosto; + = mais à frente)
+};
+
+// Limiares dos gestos de mão. Ajustáveis ao vivo pelo console (window.GEST),
+// no mesmo espírito do OCC: GEST.debug = true mostra as métricas na tela.
+window.GEST = {
+  debug: false,
+  fingerCurl: 1.05,  // ponta mais perto do punho que a base x este fator => dedo abaixado
+  thumbTuck: 0.95,   // dist(polegar, base do médio) / tamanho da mão abaixo disto => recolhido
+  holdMs: 800,       // tempo que o gesto precisa ficar parado para valer
+  edgeMargin: 0.02,  // faixa nas bordas do quadro onde a mão é considerada saindo
 };
 let video;
 let predictionInFlight = false;
@@ -95,25 +114,27 @@ const smooth = {
   handScanning: false,
   handScanFrames: 0,
   handScanCompleted: false,
-  refNoseZ: 0,
 };
 
 let currentStyle = 'square';
 let currentColor = '#000000';
-let currentLensColor = '#111111';
-let currentLensOpacity = 0.85;
+let currentLensIdx = 0; // índice em LENS_COLORS da lente que está valendo
+let currentLensColor = LENS_COLORS[currentLensIdx].color;
+let currentLensOpacity = LENS_COLORS[currentLensIdx].opacity;
 
 const gestureState = {
-  rightHandOpen: false,
-  rightHandFist: false,
-  leftHandFingers: 0,
-  rightHandFingers: 0,
-  rightHandX: 0.5,
-  fistActiveX: null,
+  frameHandClosed: false, // punho fechado da mão da armação => barra RGB ativa
   frameColorIdx: 5,
-  lastModelSwitchTime: 0,
-  lastLensSwitchTime: 0,
+  frameHandFingers: 0,
+  lensHandFingers: 0,
 };
+
+function releaseColorStrip() {
+  if (!gestureState.frameHandClosed) return;
+  gestureState.frameHandClosed = false;
+  const strip = document.getElementById('color-strip');
+  if (strip) strip.classList.remove('active');
+}
 
 let adjHeight = -10;
 const adjRotation = 0;
@@ -129,28 +150,143 @@ function toVec3(pts, i) {
   return new THREE.Vector3(pts[i][0] - vw/2, -pts[i][1] + vh/2, -pts[i][2]);
 }
 
-function isFist(pts) {
-  if (!pts || pts.length < 21) return false;
-  const tips = [HM.thumbTip, HM.indexTip, HM.middleTip, HM.ringTip, HM.pinkyTip];
-  const mcps = [HM.thumbMCP, HM.indexMCP, HM.middleMCP, HM.ringMCP, HM.pinkyMCP];
-  let closed = 0;
-  for (let i = 1; i < tips.length; i++) {
-    if (pts[tips[i]][1] > pts[mcps[i]][1]) closed++;
-  }
-  return closed >= 3;
+function dist2D(a, b) { return Math.hypot(a[0] - b[0], a[1] - b[1]); }
+
+// Tamanho da mão na imagem (punho -> base do dedo médio). Serve de régua para
+// normalizar as outras medidas, então os gestos funcionam a qualquer distância.
+function handSpan(pts) {
+  return Math.max(dist2D(pts[HM.wrist], pts[HM.middleMCP]), 1);
 }
 
-function countFingersHand(pts) {
-  if (!pts || pts.length < 21) return 0;
-  let count = 0;
-  const isRightHand = pts[HM.indexMCP][0] > pts[HM.pinkyMCP][0];
-  if (isRightHand) { if (pts[HM.thumbTip][0] < pts[HM.thumbIP][0]) count++; }
-  else { if (pts[HM.thumbTip][0] > pts[HM.thumbIP][0]) count++; }
-  if (pts[HM.indexTip][1] < pts[HM.indexPIP][1]) count++;
-  if (pts[HM.middleTip][1] < pts[HM.middlePIP][1]) count++;
-  if (pts[HM.ringTip][1] < pts[HM.ringPIP][1]) count++;
-  if (pts[HM.pinkyTip][1] < pts[HM.pinkyPIP][1]) count++;
-  return count;
+// Um dedo está abaixado quando a ponta chega mais perto do punho que a própria
+// junta da base. Diferente de comparar Y da ponta com Y da PIP, isto não depende
+// da mão estar na vertical.
+function isFingerCurled(pts, tip, mcp) {
+  const wrist = pts[HM.wrist];
+  return dist2D(pts[tip], wrist) < dist2D(pts[mcp], wrist) * window.GEST.fingerCurl;
+}
+
+// O polegar só conta como recolhido quando a ponta encosta na palma. Esticado
+// para o lado (ou para cima, tipo 👍) a distância cresce e o punho não é aceito.
+function isThumbTucked(pts) {
+  return dist2D(pts[HM.thumbTip], pts[HM.middleMCP]) < handSpan(pts) * window.GEST.thumbTuck;
+}
+
+// Punho fechado de verdade: os 4 dedos abaixados E o polegar recolhido.
+function isHandFullyClosed(pts) {
+  if (!pts || pts.length < 21) return false;
+  const allCurled =
+    isFingerCurled(pts, HM.indexTip, HM.indexMCP) &&
+    isFingerCurled(pts, HM.middleTip, HM.middleMCP) &&
+    isFingerCurled(pts, HM.ringTip, HM.ringMCP) &&
+    isFingerCurled(pts, HM.pinkyTip, HM.pinkyMCP);
+  return allCurled && isThumbTucked(pts);
+}
+
+// A confiabilidade dos landmarks cai quando a mão está entrando ou saindo do
+// quadro: no modo vídeo o MediaPipe rastreia pelo bounding box do frame anterior,
+// e é justamente aí que a contagem de dedos erra. Nessas bordas ignoramos a
+// leitura em vez de aplicar uma troca errada.
+// Atenção: não usar na barra RGB, que precisa da mão perto da borda lateral
+// para alcançar os extremos do arco-íris.
+function isHandFullyVisible(pts) {
+  if (!pts || pts.length < 21) return false;
+  const w = (video && video.videoWidth) || 640;
+  const h = (video && video.videoHeight) || 480;
+  const mx = w * window.GEST.edgeMargin;
+  const my = h * window.GEST.edgeMargin;
+  for (let i = 0; i < pts.length; i++) {
+    if (pts[i][0] < mx || pts[i][0] > w - mx) return false;
+    if (pts[i][1] < my || pts[i][1] > h - my) return false;
+  }
+  return true;
+}
+
+// Um gesto só vale depois de ficar parado por GEST.holdMs (padrão "dwell" das
+// interfaces sem toque). Evita trocas acidentais enquanto a mão entra ou sai do
+// quadro — era o que fazia a lente escolhida voltar para a primeira opção.
+// `applied` guarda o que já está valendo, para a mão voltar com os mesmos dedos
+// sem reaplicar nem repetir o aviso.
+const gestureDwell = {
+  lens:  { value: null, since: 0, applied: null, locked: false },
+  style: { value: null, since: 0, applied: null, locked: false },
+};
+
+function trackDwell(slot, value) {
+  const st = gestureDwell[slot];
+  const now = Date.now();
+  if (st.value !== value) {
+    st.value = value;
+    st.since = now;
+  }
+  if (st.applied === value) return { progress: 1, fired: false };
+  const progress = clamp((now - st.since) / window.GEST.holdMs, 0, 1);
+  if (progress >= 1) {
+    st.applied = value;
+    st.locked = false;
+    return { progress: 1, fired: true };
+  }
+  return { progress, fired: false };
+}
+
+// Mão aberta: para de trocar e trava o que está valendo. É o gesto que permite
+// tirar a mão da tela sem alterar a escolha.
+function lockDwell(slot) {
+  const st = gestureDwell[slot];
+  st.value = null;
+  st.locked = true;
+}
+
+const dwellEl = {
+  box: null, label: null, fill: null,
+};
+
+function showDwellFeedback(text, progress) {
+  if (!dwellEl.box) {
+    dwellEl.box = document.getElementById('gesture-dwell');
+    dwellEl.label = document.getElementById('gesture-dwell-label');
+    dwellEl.fill = document.getElementById('gesture-dwell-fill');
+  }
+  if (!dwellEl.box) return;
+  dwellEl.label.textContent = text;
+  dwellEl.fill.style.width = Math.round(clamp(progress, 0, 1) * 100) + '%';
+  dwellEl.box.classList.add('show');
+}
+
+function hideDwellFeedback() {
+  if (dwellEl.box) dwellEl.box.classList.remove('show');
+}
+
+// countOpenFingers ignora o polegar, então 4 é o máximo: a mão inteira aberta.
+const OPEN_HAND_FINGERS = 4;
+
+// Regras dos gestos de contagem de dedos. Lente e modelo se comportam igual:
+//   mão entrando/saindo do quadro -> ignora (leitura não confiável)
+//   0 dedos                       -> não muda nada
+//   1..N dedos                    -> escolhe a opção, valendo após o dwell
+//   mão aberta (4)                -> trava o que está valendo
+// Devolve null quando não há nada a fazer, ou { idx, progress, fired }.
+function readFingerSelection(slot, pts, optionCount, label, currentName) {
+  if (!isHandFullyVisible(pts)) return null;
+
+  const fingers = countOpenFingers(pts);
+
+  if (fingers >= OPEN_HAND_FINGERS) {
+    lockDwell(slot);
+    showDwellFeedback(`🔒 ${label}: ${currentName}`, 1);
+    return null;
+  }
+
+  // A contagem cai para 0 quando a mão sai do quadro, e antes isso devolvia a
+  // lente para a primeira opção (o preto).
+  if (fingers < 1) {
+    hideDwellFeedback();
+    return null;
+  }
+
+  const idx = Math.min(fingers - 1, optionCount - 1);
+  const { progress, fired } = trackDwell(slot, idx);
+  return { idx, progress, fired };
 }
 
 function countOpenFingers(pts) {
@@ -882,14 +1018,22 @@ function runPrediction() {
       const hS = fH / CFG.refFaceHeight;
       const bS = wS * 0.7 + hS * 0.3;
 
-      const noseTipZ = nTip.z - nose.z;
-      const noseZDelta = smooth.scanCompleted ? (nose.z - smooth.refNoseZ) : 0;
-      const depAdj = clamp(noseTipZ * 0.06 - noseZDelta * 0.04, -1, 3);
+      // Tamanho do rosto em relação à distância de referência: 1.0 quando a
+      // largura medida é igual a CFG.refHeadWidth. Tudo que desloca os óculos é
+      // expresso nesta unidade, então a posição relativa ao rosto não muda
+      // quando a pessoa se aproxima ou se afasta da câmera.
+      // Usamos só a largura (e não bS) porque a altura do rosto encurta quando a
+      // cabeça se inclina, o que fazia os óculos escorregarem no pitch.
+      const fwNorm = fW / CFG.refHeadWidth;
 
-      const maxOffset = fW * 1.5;
-      const distScale = Math.abs(adjDistance) > maxOffset ? maxOffset / Math.abs(adjDistance) : 1;
+      // Profundidade do nariz normalizada pelo tamanho do rosto: adimensional,
+      // ao contrário do valor em pixels, que cresce junto com a proximidade.
+      // O fator refHeadWidth * 0.06 mantém exatamente o mesmo resultado de antes
+      // na distância de referência (fW = 140).
+      const noseDepth = (nTip.z - nose.z) / Math.max(fW, 1);
+      const depAdj = clamp(noseDepth * CFG.refHeadWidth * 0.06, -1, 3);
 
-      const zOffset = (CFG.glassesDepth + depAdj + adjDistance * distScale) * bS;
+      const zOffset = (CFG.glassesDepth + depAdj + adjDistance) * fwNorm;
       const tPos = eMid.clone()
         .addScaledVector(xAxis, sc.centerX + adjLateral)
         .addScaledVector(yAxis, adjHeight)
@@ -913,13 +1057,15 @@ function runPrediction() {
           scanStatus.textContent = 'Escaneando...';
           scanProgressBar.style.width = '0%';
         }
-        smooth.scanFrames.push({ x: tPos.x, y: tPos.y, z: nose.z });
+        // O scan serve só para dar tempo do tracking estabilizar antes de mostrar
+        // os óculos; a profundidade não é mais calibrada aqui (era o refNoseZ,
+        // que amarrava a posição à distância em que a pessoa estava no scan).
+        smooth.scanFrames.push(1);
         const pct = Math.min(smooth.scanFrames.length / 10, 1) * 100;
         scanProgressBar.style.width = pct + '%';
         if (smooth.scanFrames.length >= 10) {
           smooth.scanCompleted = true;
           smooth.scanning = false;
-          smooth.refNoseZ = smooth.scanFrames.reduce((s, f) => s + f.z, 0) / smooth.scanFrames.length;
           scanOverlay.classList.add('hidden');
         } else {
           scanStatus.textContent = `${smooth.scanFrames.length}/10`;
@@ -971,19 +1117,44 @@ function runPrediction() {
         // Tamanho do elipsoide (esfera unitária escalada)
         occluder.scale.set(O.rx * fW, O.ry * fH, O.rz * fW);
         occluder.visible = true;
-        // Modo debug: mostra a máscara em vermelho semitransparente para ajuste
+
         const m = occluder.material;
-        if (O.debug) {
-          m.colorWrite = true;
-          m.transparent = true;
-          m.opacity = 0.45;
-          m.color.set(0xff0033);
-        } else {
-          m.colorWrite = false;
-          m.transparent = false;
-          m.opacity = 1.0;
+
+        // A máscara só deve esconder o que está ATRÁS do rosto. Ela gira junto
+        // com a cabeça, então com a cabeça muito abaixada ou levantada o raio
+        // maior do elipsoide (o vertical, ry * fH) passa a apontar para a câmera,
+        // invade a frente do rosto e apaga as DUAS astes de uma vez. Cortar a
+        // metade dianteira resolve isso: o corte só reduz oclusão, nunca aumenta,
+        // então o giro lateral continua escondendo a aste oposta como antes.
+        if (O.clip) {
+          const planePoint = eMid.clone().addScaledVector(zAxis, O.front * fW);
+          occFrontPlane.setFromNormalAndCoplanarPoint(zAxis.clone().negate(), planePoint);
+          if (m.clippingPlanes !== occClipPlanes) {
+            m.clippingPlanes = occClipPlanes;
+            m.needsUpdate = true;
+          }
+        } else if (m.clippingPlanes && m.clippingPlanes.length) {
+          m.clippingPlanes = [];
+          m.needsUpdate = true;
         }
-        m.needsUpdate = true;
+
+        // Modo debug: mostra a máscara em vermelho semitransparente para ajuste.
+        // Só reconfigura o material quando o modo muda — needsUpdate a cada frame
+        // recompila o shader sem necessidade.
+        if (m.userData.debugApplied !== O.debug) {
+          m.userData.debugApplied = O.debug;
+          if (O.debug) {
+            m.colorWrite = true;
+            m.transparent = true;
+            m.opacity = 0.45;
+            m.color.set(0xff0033);
+          } else {
+            m.colorWrite = false;
+            m.transparent = false;
+            m.opacity = 1.0;
+          }
+          m.needsUpdate = true;
+        }
       }
 
       try {
@@ -1138,54 +1309,62 @@ function runPrediction() {
             return;
           }
 
-          let leftHandPts = null;
-          let rightHandPts = null;
+          // O MediaPipe recebe a imagem NÃO espelhada (o scaleX(-1) do #webcam e
+          // do #threejs-container é só exibição). Nessa imagem a pessoa aparece
+          // como se estivesse de frente para você: a mão DIREITA dela cai na
+          // metade esquerda (x < 0.5) e a ESQUERDA na metade direita (x >= 0.5).
+          // Daí o mapeamento: mão direita comanda armação + modelo, mão esquerda
+          // comanda a lente (é o que o guia em onboarding.html documenta).
+          // A metade da imagem é mais confiável que deduzir a mão pela anatomia
+          // (indexMCP vs pinkyMCP), que troca de resultado com a palma virada.
+          let handFrame = null; // mão direita da pessoa: cor da armação + modelo
+          let handLens = null;  // mão esquerda da pessoa: cor da lente
 
           for (let h = 0; h < handLandmarks.length; h++) {
             const hpts = handLandmarks[h].map(l => [l.x * (video.videoWidth || 640), l.y * (video.videoHeight || 480), l.z * (video.videoWidth || 640)]);
-            const isRight = hpts[HM.indexMCP][0] > hpts[HM.pinkyMCP][0];
-            if (isRight) rightHandPts = hpts;
-            else leftHandPts = hpts;
+            if (handXNormalized(hpts) < 0.5) handFrame = hpts;
+            else handLens = hpts;
           }
 
-          if (leftHandPts) {
-            const leftHandX = handXNormalized(leftHandPts);
-            if (leftHandX >= 0.5) {
-              const leftFingers = countOpenFingers(leftHandPts);
-              const lensIdx = Math.min(leftFingers, LENS_COLORS.length - 1);
-              if (lensIdx !== smooth.lastLensIdx) {
-                const now = Date.now();
-                if (now - gestureState.lastLensSwitchTime > 300) {
-                  smooth.lastLensIdx = lensIdx;
-                  gestureState.lastLensSwitchTime = now;
-                  currentLensColor = LENS_COLORS[lensIdx].color;
-                  currentLensOpacity = LENS_COLORS[lensIdx].opacity;
-                  rebuildGlasses();
-                  showToast(`Lente: ${LENS_COLORS[lensIdx].name}`);
-                }
+          // ── Mão da lente: 1 = Preto, 2 = Transparente, 3 = Amarelo ────────
+          if (handLens) {
+            const sel = readFingerSelection(
+              'lens', handLens, LENS_COLORS.length, 'Lente', LENS_COLORS[currentLensIdx].name
+            );
+            if (sel) {
+              const opt = LENS_COLORS[sel.idx];
+              if (sel.fired) {
+                currentLensIdx = sel.idx;
+                currentLensColor = opt.color;
+                currentLensOpacity = opt.opacity;
+                rebuildGlasses();
+                showToast(`Lente: ${opt.name}`);
+                showDwellFeedback(`Lente: ${opt.name} ✓`, 1);
+              } else {
+                showDwellFeedback(`Lente: ${opt.name}`, sel.progress);
               }
-              gestureState.leftHandFingers = leftFingers;
-            } else {
-              gestureState.leftHandFingers = 0;
             }
+            gestureState.lensHandFingers = countOpenFingers(handLens);
           } else {
-            gestureState.leftHandFingers = 0;
+            gestureState.lensHandFingers = 0;
           }
 
-          if (rightHandPts) {
-            const rightHandX = handXNormalized(rightHandPts);
-            const openFingersTotal = countFingersHand(rightHandPts);
-            const openFingers = countOpenFingers(rightHandPts);
+          // ── Mão da armação: punho fechado arrasta a barra RGB ─────────────
+          if (handFrame) {
+            const isClosed = isHandFullyClosed(handFrame);
 
-            if (openFingersTotal === 0 && rightHandX < 0.5) {
-              if (!gestureState.rightHandFist) {
-                gestureState.rightHandFist = true;
-                gestureState.fistActiveX = handXNormalized(rightHandPts);
+            if (window.GEST.debug) {
+              const tuck = (dist2D(handFrame[HM.thumbTip], handFrame[HM.middleMCP]) / handSpan(handFrame)).toFixed(2);
+              showGestureStatus(`punho:${isClosed ? 'sim' : 'nao'} polegar:${tuck} dedos:${countOpenFingers(handFrame)}`);
+            }
+
+            if (isClosed) {
+              if (!gestureState.frameHandClosed) {
+                gestureState.frameHandClosed = true;
                 const strip = document.getElementById('color-strip');
                 if (strip) strip.classList.add('active');
               }
-              const handX = handXNormalized(rightHandPts);
-              const sensitiveX = clamp((0.47 - handX) / 0.38, 0, 1);
+              const sensitiveX = clamp((0.47 - handXNormalized(handFrame)) / 0.38, 0, 1);
 
               const fc = frameColorFromPosition(sensitiveX);
               if (fc.hex !== currentColor) {
@@ -1195,41 +1374,41 @@ function runPrediction() {
               }
 
               const needle = document.getElementById('color-needle');
-              if (needle) {
-                needle.style.left = (sensitiveX * 100) + '%';
-              }
-              showGestureStatus(`Armação: cor RGB`);
+              if (needle) needle.style.left = (sensitiveX * 100) + '%';
+              updateNeedleColor(sensitiveX);
+              if (!window.GEST.debug) showGestureStatus('Armação: cor RGB');
             } else {
-              if (gestureState.rightHandFist) {
-                gestureState.rightHandFist = false;
-                gestureState.fistActiveX = null;
-                const strip = document.getElementById('color-strip');
-                if (strip) strip.classList.remove('active');
-              }
+              releaseColorStrip();
 
-              if (openFingers >= 1 && rightHandX < 0.5) {
-                const styleIdx = Math.min(openFingers - 1, STYLES.length - 1);
-                const newStyle = STYLES[styleIdx];
-                const now = Date.now();
-                if (newStyle !== currentStyle && now - gestureState.lastModelSwitchTime > 300) {
-                  currentStyle = newStyle;
-                  gestureState.lastModelSwitchTime = now;
-                  rebuildGlasses();
-                  updateStyleMatrix(currentStyle);
-                  showToast(`Estilo: ${currentStyle}`);
+              // Dedos abertos trocam o modelo: 1 = Quadrado, 2 = Aviador, 3 = Gatinho.
+              const sel = readFingerSelection(
+                'style', handFrame, STYLES.length, 'Modelo', STYLE_LABELS[currentStyle]
+              );
+              if (sel) {
+                const styleId = STYLES[sel.idx];
+                if (sel.fired) {
+                  if (styleId !== currentStyle) {
+                    currentStyle = styleId;
+                    rebuildGlasses();
+                    updateStyleMatrix(currentStyle);
+                    showToast(`Modelo: ${STYLE_LABELS[styleId]}`);
+                  }
+                  showDwellFeedback(`Modelo: ${STYLE_LABELS[styleId]} ✓`, 1);
+                } else {
+                  showDwellFeedback(`Modelo: ${STYLE_LABELS[styleId]}`, sel.progress);
                 }
-                gestureState.rightHandOpen = true;
               }
-              gestureState.rightHandFingers = openFingers;
+              gestureState.frameHandFingers = countOpenFingers(handFrame);
+              if (!window.GEST.debug) hideGestureStatus();
             }
           } else {
-            if (gestureState.rightHandFist) {
-              gestureState.rightHandFist = false;
-              gestureState.fistActiveX = null;
-              const strip = document.getElementById('color-strip');
-              if (strip) strip.classList.remove('active');
-            }
+            releaseColorStrip();
+            if (!window.GEST.debug) hideGestureStatus();
           }
+
+          // Sem nenhuma mão em cena não há gesto em andamento para mostrar.
+          // As escolhas já aplicadas continuam valendo.
+          if (!handFrame && !handLens) hideDwellFeedback();
         }
       } catch (e) { /* hand error */ }
     }
@@ -1418,21 +1597,12 @@ function connectBackend() {
 }
 
 function handleBackendMessage(msg) {
-  if (msg.type === 'frame-result' && msg.hand) {
-    const hand = msg.hand;
-    if (hand.detected && hand.isOpen !== null) {
-      const strip = document.getElementById('color-strip');
-      if (hand.isOpen) {
-        if (strip && !strip.classList.contains('active')) {
-          strip.classList.add('active');
-        }
-      } else {
-        if (strip && strip.classList.contains('active') && !gestureState.rightHandFist) {
-          strip.classList.remove('active');
-        }
-      }
-    }
-  }
+  // A barra RGB é controlada só pelo gesto local (punho fechado). O backend
+  // chegava a abri-la com hand.isOpen — invertido, já que a barra existe para a
+  // mão FECHADA — e disputava o controle com o gesto, fazendo a barra aparecer
+  // sozinha. O contorno de mão do OpenCV não distingue polegar esticado de
+  // punho fechado, então não serve para esse gatilho.
+  void msg;
 }
 
 function sendFrameToBackend() {
