@@ -136,7 +136,8 @@ loader.load('../core/assets/models/' + (params.get('modelo') || 'square') + '.gl
       : { colorWrite: false })
   );
   occ.renderOrder = 0.5;
-  occ.position.set(0, 0, -OCC.back * fW);
+  const shift = parseFloat(params.get('shift') ?? '0');
+  occ.position.set(shift * fW, 0, -OCC.back * fW);
   occ.scale.set(OCC.rx * fW, OCC.ry * fH, OCC.rz * fW);
   const plane = new THREE.Plane();
   plane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 0, OCC.front * fW));

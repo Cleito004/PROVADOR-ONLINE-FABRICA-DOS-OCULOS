@@ -140,7 +140,11 @@ window.TEMPLE = {
   enabled: true,
   reveal: 0.55,    // quanto a máscara recua de perfil (soma em OCC.frontGap)
   rise: 0.10,      // velocidade do crescimento por frame (menor = mais suave)
-  yawStart: 0.20,  // a partir de quanto de giro começa a revelar (seno do yaw)
+  // Recuar a máscara descobre a aste dos DOIS lados. Com o rosto quase de frente
+  // nenhuma delas está atrás da cabeça ainda, então recuar cedo faz aparecerem as
+  // duas. Por isso a revelação só começa com o rosto já claramente virado: aí a
+  // aste oposta já passou para trás e continua escondida.
+  yawStart: 0.38,  // a partir de quanto de giro começa a revelar (seno do yaw)
 };
 
 // Tamanho dos óculos no rosto, como multiplicador do tamanho calibrado.
