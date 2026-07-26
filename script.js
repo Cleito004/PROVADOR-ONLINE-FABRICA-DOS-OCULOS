@@ -107,17 +107,22 @@ window.OCC = {
 // cresce conforme o rosto gira, ficando parecida com um óculos de verdade.
 // A aste oposta nunca muda: continua escondida atrás da cabeça.
 // O crescimento é gradual; a volta é imediata, como pedido.
+// Aste do lado mostrado: quanto mais o rosto vira, mais a máscara da cabeça
+// recua, e mais aste fica à mostra. De frente a máscara volta para perto da
+// armação e as astes somem — que é o que mantém o rosto limpo, inclusive quando
+// a cabeça está inclinada para cima ou para baixo.
 //
-// DESLIGADO por padrão: o efeito depende do recorte feito por splitFrameMesh, e
-// esse recorte não separa a aste inteira — o trecho colado na dobradiça continua
-// junto da armação. Com o efeito ligado, a ponta cresce, escapa da máscara e
-// aparece flutuando, com um vão até a armação (pior que a aste curta).
-// Para voltar a mexer nisso, o caminho é corrigir o recorte antes, não o efeito.
+// O que faz a aste parecer curta não é o tamanho dela: é onde a máscara começa.
+// Por isso mexer aqui funciona, e esticar o modelo não funcionava (esticar joga
+// a aste mais para dentro da máscara, e o pedaço à mostra continua igual).
+//
+// Como a aste oposta fica atrás da cabeça, ela segue escondida mesmo com a
+// máscara recuada: na tela cresce só a aste do lado para onde o rosto virou.
 window.TEMPLE = {
-  enabled: false,
-  growth: 0.9,     // quanto a aste chega a crescer, de perfil (0.9 = +90%)
-  rise: 0.12,      // velocidade do crescimento por frame (menor = mais suave)
-  yawStart: 0.20,  // a partir de quanto de giro a aste começa a crescer (seno do yaw)
+  enabled: true,
+  reveal: 0.40,    // quanto a máscara recua de perfil (soma em OCC.frontGap)
+  rise: 0.10,      // velocidade do crescimento por frame (menor = mais suave)
+  yawStart: 0.20,  // a partir de quanto de giro começa a revelar (seno do yaw)
 };
 
 // Suavização do rastreamento. Ajustável ao vivo pelo console (window.SMOOTH).
@@ -808,6 +813,7 @@ function createFaceSlot() {
       prev: new THREE.Vector3(),
     },
     anchor: new THREE.Vector3(), // meio dos olhos no frame anterior
+    templeReveal: 0,             // o quanto a aste está revelada (ver window.TEMPLE)
     inUse: false,
   };
   slot.glasses.visible = false;
@@ -1119,7 +1125,8 @@ function updateOccluder(slot, f) {
   // Recuo do centro = raio de profundidade + folga. Assim a frente do elipsoide
   // fica sempre frontGap x fW atrás do plano dos olhos, independentemente do
   // tamanho da máscara: ela nunca alcança a armação, e não precisa ser cortada.
-  const back = (O.rz + O.frontGap) * f.fW;
+  const gap = O.frontGap + window.TEMPLE.reveal * slot.templeReveal;
+  const back = (O.rz + gap) * f.fW;
   occluder.position.copy(f.eMid).addScaledVector(f.zAxis, -back);
   occluder.quaternion.setFromRotationMatrix(
     new THREE.Matrix4().makeBasis(f.xAxis, f.yAxis, f.zAxis)
@@ -1147,64 +1154,6 @@ function updateOccluder(slot, f) {
   }
 }
 
-// Revela e alonga a aste do lado que o rosto está mostrando.
-// Qual lado aparece: o eixo X do rosto aponta de uma orelha para a outra, então
-// o sinal de xAxis.z diz qual das duas está virada para a câmera; o módulo é o
-// seno do giro, ou seja o quanto o rosto está de perfil.
-function applyTempleReveal(slot, f) {
-  const T = window.TEMPLE;
-  const ud = slot.glasses.userData;
-  const left = ud.leftTempleMesh;
-  const right = ud.rightTempleMesh;
-  // Só funciona quando o modelo pôde ser separado em armação + duas astes.
-  if (!left || !right || !ud.templeGrow) return;
-
-  // Desligado: devolve as astes ao estado normal, para dar e tirar o efeito pelo
-  // console sem precisar recarregar a página.
-  if (!T.enabled) {
-    if (ud.templeGrow.left !== 1 || ud.templeGrow.right !== 1) {
-      [left, right].forEach(mesh => {
-        mesh.scale.z = 1;
-        mesh.position.z = 0;
-        mesh.renderOrder = 1;
-        if (!mesh.material.depthTest) {
-          mesh.material.depthTest = true;
-          mesh.material.needsUpdate = true;
-        }
-      });
-      ud.templeGrow.left = 1;
-      ud.templeGrow.right = 1;
-    }
-    return;
-  }
-
-  const sin = clamp(f.xAxis.z, -1, 1);
-  const amount = clamp((Math.abs(sin) - T.yawStart) / (1 - T.yawStart), 0, 1);
-  const frente = sin < 0 ? 'left' : 'right';
-
-  [['left', left, ud.leftHingeZ], ['right', right, ud.rightHingeZ]].forEach(([lado, mesh, hingeZ]) => {
-    const alvo = (lado === frente) ? 1 + T.growth * amount : 1;
-    const atual = ud.templeGrow[lado];
-
-    // Cresce aos poucos, encolhe de uma vez.
-    ud.templeGrow[lado] = alvo > atual ? atual + (alvo - atual) * T.rise : alvo;
-
-    const s = ud.templeGrow[lado];
-    mesh.scale.z = s;
-    // Mantém a dobradiça parada enquanto o resto da aste estica para trás.
-    mesh.position.z = hingeZ * (1 - s);
-
-    // A aste que está à mostra passa por cima da máscara da cabeça; a outra
-    // continua sujeita a ela, e é isso que a mantém escondida atrás do rosto.
-    const revelar = (lado === frente) && amount > 0;
-    if (mesh.material.depthTest === revelar) {
-      mesh.material.depthTest = !revelar;
-      mesh.material.needsUpdate = true;
-    }
-    mesh.renderOrder = revelar ? 2 : 1;
-  });
-}
-
 function updateSlotFromFace(slot, f) {
   const sc = STYLE_CONFIG[currentStyle] || STYLE_CONFIG.square;
 
@@ -1220,6 +1169,17 @@ function updateSlotFromFace(slot, f) {
 
   const tScaleVal = bS * CFG.glassesScale;
   const tScale = new THREE.Vector3(tScaleVal, tScaleVal, tScaleVal);
+
+  // Quanto o rosto está de perfil: o eixo X vai de uma orelha à outra, então a
+  // componente Z dele é o seno do giro (0 de frente, 1 de lado).
+  // Cresce aos poucos e volta de uma vez, como um óculos que "aparece" ao virar.
+  const T = window.TEMPLE;
+  const alvo = T.enabled
+    ? clamp((Math.abs(clamp(f.xAxis.z, -1, 1)) - T.yawStart) / (1 - T.yawStart), 0, 1)
+    : 0;
+  slot.templeReveal = alvo > slot.templeReveal
+    ? slot.templeReveal + (alvo - slot.templeReveal) * T.rise
+    : alvo;
 
   // O wrapper é centrado no meio da armação e as astes ocupam a metade de trás,
   // então o centro recua metade da profundidade do modelo para as LENTES caírem
@@ -1285,7 +1245,6 @@ function updateSlotFromFace(slot, f) {
   slot.anchor.copy(f.eMid);
   slot.inUse = true;
 
-  applyTempleReveal(slot, f);
   updateOccluder(slot, f);
 }
 

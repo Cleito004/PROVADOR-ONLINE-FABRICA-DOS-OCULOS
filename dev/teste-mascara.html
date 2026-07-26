@@ -123,8 +123,9 @@ loader.load('../core/assets/models/square.glb', gltf => {
   const depthHalf = bSize.z * 0.5 * normFactor;
   const zOffset = -depthHalf * tScaleVal;   // adjDistance = 0, depAdj ~ 0
 
-  wrapper.scale.setScalar(tScaleVal);
-  wrapper.position.set(0, 0, zOffset);
+  const stretch = parseFloat(params.get('stretch') ?? '1');
+  wrapper.scale.set(tScaleVal, tScaleVal, tScaleVal * stretch);
+  wrapper.position.set(0, 0, -depthHalf * tScaleVal * stretch);
   scene.add(wrapper);
 
   // mascara
