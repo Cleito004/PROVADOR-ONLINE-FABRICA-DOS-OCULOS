@@ -68,12 +68,12 @@ const STYLE_CONFIG = {
 
 let faceLandmarker;
 let handLandmarker;
-let glassesGroup;
-let occluder = null;
-// Plano que corta a metade dianteira da máscara da cabeça, atualizado por frame
-// (ver o bloco do occluder em runPrediction). Em coordenadas de mundo.
-const occFrontPlane = new THREE.Plane();
-const occClipPlanes = [occFrontPlane];
+// Cada pessoa detectada ganha o seu próprio par de óculos e a sua máscara de
+// cabeça — é isso que permite mais de uma criança na frente da tela ao mesmo
+// tempo. O modelo e as cores continuam sendo os mesmos para todos: os gestos
+// valem para a cena inteira, então quem gesticular troca os óculos de todo mundo.
+const MAX_FACES = 4;
+const faceSlots = [];
 let videoTexture;
 let videoSprite;
 let renderer, scene, camera;
@@ -91,7 +91,7 @@ window.OCC = {
   rx: 0.52,     // raio horizontal (x largura do rosto)
   ry: 0.62,     // raio vertical (x altura do rosto)
   rz: 0.75,     // raio de profundidade (x largura do rosto)
-  clip: true,   // corta a metade dianteira da máscara (ver occFrontPlane)
+  clip: true,   // corta a metade dianteira da máscara (ver updateOccluder)
   front: 0.0,   // onde fica esse corte (x largura do rosto; + = mais à frente)
 };
 
@@ -689,20 +689,11 @@ function buildFromModel(style, frameColor, lensColor, lensOpacity) {
   } else {
   }
 
-  if (splitLeftZ && leftTempleMat) {
-    const tipCut = splitLeftZ.minZ + (splitLeftZ.maxZ - splitLeftZ.minZ) * 0.22;
-    const clipPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -tipCut);
-    leftTempleMat.clippingPlanes = [clipPlane];
-    leftTempleMat.clipShadows = true;
-    leftTempleMat.needsUpdate = true;
-  }
-  if (splitRightZ && rightTempleMat) {
-    const tipCut = splitRightZ.minZ + (splitRightZ.maxZ - splitRightZ.minZ) * 0.22;
-    const clipPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -tipCut);
-    rightTempleMat.clippingPlanes = [clipPlane];
-    rightTempleMat.clipShadows = true;
-    rightTempleMat.needsUpdate = true;
-  }
+  // Aqui existiam planos de corte para aparar a ponta das astes. Planos do
+  // Three.js são em coordenadas de MUNDO, não do modelo, então eles cortavam num
+  // ponto fixo da cena — e com mais de uma pessoa cortariam no lugar errado.
+  // Quem esconde a aste hoje é a máscara da cabeça (ver updateOccluder).
+  void splitLeftZ; void splitRightZ;
 
   const frameMats = [];
   clone.traverse(c => {
@@ -741,33 +732,105 @@ function buildFromModel(style, frameColor, lensColor, lensOpacity) {
   wrapper.userData.halfH = bSize.y * 0.5;
   wrapper.userData.leftTempleMesh = splitLeftMesh;
   wrapper.userData.rightTempleMesh = splitRightMesh;
-  wrapper.userData.tipClipLeft = leftTempleMat?.clippingPlanes || [];
-  wrapper.userData.tipClipRight = rightTempleMat?.clippingPlanes || [];
   wrapper.add(normGroup);
   return wrapper;
 }
 
+// ── Slots de rosto ──────────────────────────────────────────────────────────
+
+function disposeObject3D(obj) {
+  obj.traverse(c => {
+    if (c.isMesh) {
+      c.geometry && c.geometry.dispose();
+      c.material && c.material.dispose();
+    }
+  });
+}
+
+function createFaceSlot() {
+  // Máscara da cabeça: invisível na tela (colorWrite:false) mas escreve
+  // profundidade, escondendo o que estiver atrás dela. renderOrder entre o vídeo
+  // de fundo (0) e os óculos (1).
+  const occluder = new THREE.Mesh(
+    new THREE.SphereGeometry(1, 32, 24),
+    new THREE.MeshBasicMaterial({ colorWrite: false })
+  );
+  occluder.renderOrder = 0.5;
+  occluder.visible = false;
+  scene.add(occluder);
+
+  // Cada rosto tem o seu plano de corte: os planos do Three.js são em
+  // coordenadas de mundo, então um plano compartilhado cortaria as máscaras das
+  // outras pessoas no lugar errado.
+  const clipPlane = new THREE.Plane();
+
+  const slot = {
+    glasses: buildFromModel(currentStyle, currentColor, currentLensColor, currentLensOpacity),
+    occluder,
+    clipPlane,
+    clipPlanes: [clipPlane],
+    motion: {
+      readyPos: false,
+      readyRot: false,
+      pos: new THREE.Vector3(),
+      quat: new THREE.Quaternion(),
+      scale: new THREE.Vector3(1, 1, 1),
+      prev: new THREE.Vector3(),
+    },
+    anchor: new THREE.Vector3(), // meio dos olhos no frame anterior
+    inUse: false,
+  };
+  slot.glasses.visible = false;
+  scene.add(slot.glasses);
+  faceSlots.push(slot);
+  return slot;
+}
+
+function hideSlot(slot) {
+  slot.glasses.visible = false;
+  slot.occluder.visible = false;
+  slot.motion.readyPos = false;
+  slot.motion.readyRot = false;
+  slot.inUse = false;
+}
+
+// O MediaPipe não garante que os rostos venham na mesma ordem a cada frame, e
+// não dá um identificador por pessoa. Sem casar rosto com slot, os óculos
+// pulariam de uma criança para outra. Casamos pelo mais próximo do frame
+// anterior, com uma folga proporcional ao tamanho do rosto.
+function matchSlot(eMid, fW, taken) {
+  let best = null;
+  let bestDist = Infinity;
+  for (const slot of faceSlots) {
+    if (taken.has(slot) || !slot.inUse) continue;
+    const d = slot.anchor.distanceTo(eMid);
+    if (d < bestDist) { bestDist = d; best = slot; }
+  }
+  if (best && bestDist < fW * 1.2) return best;
+
+  for (const slot of faceSlots) {
+    if (!taken.has(slot) && !slot.inUse) return slot;
+  }
+  if (faceSlots.length < MAX_FACES) return createFaceSlot();
+  return null;
+}
+
 function rebuildGlasses() {
   if (!scene) return;
-  if (glassesGroup) {
-    scene.remove(glassesGroup);
-    glassesGroup.traverse(c => {
-      if (c.isMesh) {
-        c.geometry && c.geometry.dispose();
-        c.material && c.material.dispose();
-      }
-    });
-  }
-  glassesGroup = buildFromModel(currentStyle, currentColor, currentLensColor, currentLensOpacity);
-  if (smooth.readyPos) {
-    glassesGroup.position.copy(smooth.pos);
-    glassesGroup.quaternion.copy(smooth.quat);
-    glassesGroup.scale.copy(smooth.scale);
-  }
-  scene.add(glassesGroup);
-  if (!isActive) {
-    glassesGroup.visible = false;
-  }
+  faceSlots.forEach(slot => {
+    if (slot.glasses) {
+      scene.remove(slot.glasses);
+      disposeObject3D(slot.glasses);
+    }
+    slot.glasses = buildFromModel(currentStyle, currentColor, currentLensColor, currentLensOpacity);
+    if (slot.motion.readyPos) {
+      slot.glasses.position.copy(slot.motion.pos);
+      slot.glasses.quaternion.copy(slot.motion.quat);
+      slot.glasses.scale.copy(slot.motion.scale);
+    }
+    slot.glasses.visible = isActive && slot.inUse;
+    scene.add(slot.glasses);
+  });
 }
 
 async function initScene(videoEl) {
@@ -867,22 +930,8 @@ async function initScene(videoEl) {
   rim.position.set(80, 100, -150);
   scene.add(rim);
 
-  glassesGroup = new THREE.Group();
-  scene.add(glassesGroup);
-  glassesGroup.visible = false;
-  rebuildGlasses();
-
-  // Occluder: esfera (unitária) que será escalada como elipsoide da cabeça.
-  // colorWrite:false => invisível na tela; depthWrite:true => ocupa profundidade,
-  // escondendo qualquer parte dos óculos que fique atrás dela (aste do lado oposto).
-  const occGeo = new THREE.SphereGeometry(1, 32, 24);
-  const occMat = new THREE.MeshBasicMaterial({ colorWrite: false });
-  occluder = new THREE.Mesh(occGeo, occMat);
-  // renderOrder entre o vídeo de fundo (0) e os óculos (1): escreve profundidade
-  // DEPOIS do vídeo (para não furar o fundo) e ANTES dos óculos (para ocluí-los).
-  occluder.renderOrder = 0.5;
-  occluder.visible = false;
-  scene.add(occluder);
+  // Os óculos e a máscara de cada pessoa são criados sob demanda, conforme os
+  // rostos vão sendo detectados (ver createFaceSlot / matchSlot).
 
   window.addEventListener('resize', () => {
     const vw2 = video.videoWidth || 640;
@@ -955,7 +1004,7 @@ async function initMediaPipe(delegate) {
           delegate: dl
         },
         runningMode: 'VIDEO',
-        numFaces: 1,
+        numFaces: MAX_FACES,
         minFaceDetectionConfidence: 0.5,
         minFacePresenceConfidence: 0.5,
         minTrackingConfidence: 0.5,
@@ -999,11 +1048,169 @@ function schedulePrediction() {
   }
 }
 
+// Mede o rosto e monta os eixos da cabeça a partir dos landmarks. Fica separado
+// do posicionamento porque o resultado é usado antes, para descobrir a qual
+// pessoa (slot) este rosto pertence.
+function computeFaceFrame(pts) {
+  const lEye = eyeMidpoint(pts, LM.leftEyeInner, LM.leftEyeOuter);
+  const rEye = eyeMidpoint(pts, LM.rightEyeInner, LM.rightEyeOuter);
+  const nose = toVec3(pts, LM.noseBridge);
+  const nTip = toVec3(pts, LM.noseTip);
+  const fHead = toVec3(pts, LM.forehead);
+  const chn = toVec3(pts, LM.chin);
+  const lTmp = toVec3(pts, LM.leftTemple);
+  const rTmp = toVec3(pts, LM.rightTemple);
+  const lChk = toVec3(pts, LM.leftCheek);
+  const rChk = toVec3(pts, LM.rightCheek);
+
+  const eMid = midpoint(lEye, rEye);
+  const fW = Math.max(lEye.distanceTo(rEye), lTmp.distanceTo(rTmp), lChk.distanceTo(rChk));
+  const fH = fHead.distanceTo(chn);
+
+  const yAxis = fHead.clone().sub(chn).normalize();
+  const xRaw = lTmp.clone().sub(rTmp).normalize();
+  const zAxis = xRaw.clone().cross(yAxis).normalize();
+  if (zAxis.dot(nTip.clone().sub(nose).normalize()) < 0) zAxis.negate();
+  const xAxis = yAxis.clone().cross(zAxis).normalize();
+
+  // Profundidade do nariz normalizada pelo tamanho do rosto: adimensional, ao
+  // contrário do valor em pixels, que cresce junto com a proximidade da câmera.
+  const noseDepth = (nTip.z - nose.z) / Math.max(fW, 1);
+
+  return { eMid, fW, fH, xAxis, yAxis, zAxis, noseDepth };
+}
+
+// Máscara invisível da cabeça desta pessoa: escreve profundidade sem pintar,
+// então a GPU descarta sozinha a aste que ficar atrás da cabeça.
+function updateOccluder(slot, f) {
+  const O = window.OCC;
+  const occluder = slot.occluder;
+
+  occluder.position.copy(f.eMid).addScaledVector(f.zAxis, -O.back * f.fW);
+  occluder.quaternion.setFromRotationMatrix(
+    new THREE.Matrix4().makeBasis(f.xAxis, f.yAxis, f.zAxis)
+  );
+  occluder.scale.set(O.rx * f.fW, O.ry * f.fH, O.rz * f.fW);
+  occluder.visible = true;
+
+  const m = occluder.material;
+
+  // A máscara só deve esconder o que está ATRÁS do rosto. Ela gira junto com a
+  // cabeça, então com a cabeça muito abaixada ou levantada o raio maior do
+  // elipsoide passa a apontar para a câmera, invade a frente do rosto e apaga as
+  // DUAS astes de uma vez. Cortar a metade dianteira resolve: o corte só reduz
+  // oclusão, nunca aumenta, então o giro lateral segue escondendo a aste oposta.
+  if (O.clip) {
+    const planePoint = f.eMid.clone().addScaledVector(f.zAxis, O.front * f.fW);
+    slot.clipPlane.setFromNormalAndCoplanarPoint(f.zAxis.clone().negate(), planePoint);
+    if (m.clippingPlanes !== slot.clipPlanes) {
+      m.clippingPlanes = slot.clipPlanes;
+      m.needsUpdate = true;
+    }
+  } else if (m.clippingPlanes && m.clippingPlanes.length) {
+    m.clippingPlanes = [];
+    m.needsUpdate = true;
+  }
+
+  // Modo debug: pinta a máscara de vermelho para conferir posição e tamanho. Só
+  // reconfigura quando o modo muda — needsUpdate por frame recompila o shader.
+  if (m.userData.debugApplied !== O.debug) {
+    m.userData.debugApplied = O.debug;
+    if (O.debug) {
+      m.colorWrite = true;
+      m.transparent = true;
+      m.opacity = 0.45;
+      m.color.set(0xff0033);
+    } else {
+      m.colorWrite = false;
+      m.transparent = false;
+      m.opacity = 1.0;
+    }
+    m.needsUpdate = true;
+  }
+}
+
+function updateSlotFromFace(slot, f) {
+  const sc = STYLE_CONFIG[currentStyle] || STYLE_CONFIG.square;
+
+  const wS = f.fW / CFG.refHeadWidth;
+  const hS = f.fH / CFG.refFaceHeight;
+  const bS = wS * 0.7 + hS * 0.3;
+
+  // Tamanho do rosto em relação à distância de referência: 1.0 quando a largura
+  // medida é igual a CFG.refHeadWidth. Só a largura (e não bS) porque a altura
+  // encurta quando a cabeça inclina, o que fazia os óculos escorregarem no pitch.
+  const fwNorm = f.fW / CFG.refHeadWidth;
+  const depAdj = clamp(f.noseDepth * CFG.refHeadWidth * 0.06, -1, 3);
+
+  const tScaleVal = bS * CFG.glassesScale;
+  const tScale = new THREE.Vector3(tScaleVal, tScaleVal, tScaleVal);
+
+  // O wrapper é centrado no meio da armação e as astes ocupam a metade de trás,
+  // então o centro recua metade da profundidade do modelo para as LENTES caírem
+  // sobre os olhos. Um recuo fixo em pixels criava um braço de alavanca ao longo
+  // do eixo do nariz: como o eixo gira com a cabeça, inclinar jogava os óculos
+  // para a testa ou para o queixo e amplificava o ruído do rastreamento.
+  const depthHalf = (slot.glasses.userData && slot.glasses.userData.depthHalf) || 0;
+  const zOffset = -depthHalf * tScaleVal + (CFG.glassesDepth + depAdj + adjDistance) * fwNorm;
+
+  const tPos = f.eMid.clone()
+    .addScaledVector(f.xAxis, sc.centerX + adjLateral)
+    .addScaledVector(f.yAxis, adjHeight)
+    .addScaledVector(f.zAxis, zOffset);
+
+  const rotMat = new THREE.Matrix4().makeBasis(f.xAxis, f.yAxis, f.zAxis);
+  if (adjRotation !== 0) {
+    rotMat.multiply(new THREE.Matrix4().makeRotationZ(THREE.MathUtils.degToRad(adjRotation)));
+  }
+  const targetQuat = new THREE.Quaternion().setFromRotationMatrix(rotMat);
+
+  // O fator do lerp é quanto do caminho até o alvo se percorre por frame: 1.0
+  // pula direto (nenhum filtro), valores baixos suavizam. A base baixa segura o
+  // tremor com a pessoa parada; o termo de movimento devolve resposta rápida
+  // quando ela realmente se mexe.
+  const m = slot.motion;
+  const mov = tPos.distanceTo(m.prev);
+  m.prev.copy(tPos);
+
+  const S = window.SMOOTH;
+  const aP = clamp(S.pos + mov * S.posBoost, S.pos, S.posMax);
+  const aS = clamp(S.scale + mov * S.posBoost, S.scale, S.posMax);
+
+  if (!m.readyPos) {
+    m.pos.copy(tPos);
+    m.scale.copy(tScale);
+    m.readyPos = true;
+  } else {
+    m.pos.lerp(tPos, aP);
+    m.scale.lerp(tScale, aS);
+  }
+
+  if (!m.readyRot) {
+    m.quat.copy(targetQuat);
+    m.readyRot = true;
+  } else {
+    const aR = qDelta(m.quat, targetQuat);
+    m.quat.slerp(targetQuat, clamp(S.rot + aR * S.rotBoost, S.rot, S.rotMax));
+  }
+
+  slot.glasses.position.copy(m.pos);
+  slot.glasses.quaternion.copy(m.quat);
+  slot.glasses.scale.copy(m.scale);
+  slot.glasses.visible = true;
+  slot.glasses.updateWorldMatrix(true, true);
+
+  slot.anchor.copy(f.eMid);
+  slot.inUse = true;
+
+  updateOccluder(slot, f);
+}
+
 function runPrediction() {
   if (predictionInFlight) { schedulePrediction(); return; }
   predictionInFlight = true;
 
-  if (!faceLandmarker || !glassesGroup) {
+  if (!faceLandmarker || !scene) {
     predictionInFlight = false;
     schedulePrediction();
     return;
@@ -1011,85 +1218,24 @@ function runPrediction() {
 
   try {
     const detection = faceLandmarker.detectForVideo(video, performance.now());
-    const results = { faceLandmarks: detection.faceLandmarks || [] };
+    const faces = detection.faceLandmarks || [];
 
-    if (results.faceLandmarks && results.faceLandmarks.length > 0) {
-      const pts = toPixels(results.faceLandmarks[0], video);
-
-      const lEye = eyeMidpoint(pts, LM.leftEyeInner, LM.leftEyeOuter);
-      const rEye = eyeMidpoint(pts, LM.rightEyeInner, LM.rightEyeOuter);
-      const nose = toVec3(pts, LM.noseBridge);
-      const nTip = toVec3(pts, LM.noseTip);
-      const fHead = toVec3(pts, LM.forehead);
-      const chn = toVec3(pts, LM.chin);
-      const lTmp = toVec3(pts, LM.leftTemple);
-      const rTmp = toVec3(pts, LM.rightTemple);
-      const lChk = toVec3(pts, LM.leftCheek);
-      const rChk = toVec3(pts, LM.rightCheek);
-
-      const sc = STYLE_CONFIG[currentStyle] || STYLE_CONFIG.square;
-      const eMid = midpoint(lEye, rEye);
-      const eW = lEye.distanceTo(rEye);
-      const tW = lTmp.distanceTo(rTmp);
-      const cW = lChk.distanceTo(rChk);
-      const fW = Math.max(eW, tW, cW);
-      const fH = fHead.distanceTo(chn);
-
-      const yRaw = fHead.clone().sub(chn).normalize();
-      const yAxis = yRaw;
-      const xRaw = lTmp.clone().sub(rTmp).normalize();
-      let zAxis = xRaw.clone().cross(yAxis).normalize();
-      if (zAxis.dot(nTip.clone().sub(nose).normalize()) < 0) zAxis.negate();
-      const xAxis = yAxis.clone().cross(zAxis).normalize();
-
-      const wS = fW / CFG.refHeadWidth;
-      const hS = fH / CFG.refFaceHeight;
-      const bS = wS * 0.7 + hS * 0.3;
-
-      // Tamanho do rosto em relação à distância de referência: 1.0 quando a
-      // largura medida é igual a CFG.refHeadWidth. Tudo que desloca os óculos é
-      // expresso nesta unidade, então a posição relativa ao rosto não muda
-      // quando a pessoa se aproxima ou se afasta da câmera.
-      // Usamos só a largura (e não bS) porque a altura do rosto encurta quando a
-      // cabeça se inclina, o que fazia os óculos escorregarem no pitch.
-      const fwNorm = fW / CFG.refHeadWidth;
-
-      // Profundidade do nariz normalizada pelo tamanho do rosto: adimensional,
-      // ao contrário do valor em pixels, que cresce junto com a proximidade.
-      // O fator refHeadWidth * 0.06 mantém exatamente o mesmo resultado de antes
-      // na distância de referência (fW = 140).
-      const noseDepth = (nTip.z - nose.z) / Math.max(fW, 1);
-      const depAdj = clamp(noseDepth * CFG.refHeadWidth * 0.06, -1, 3);
-
-      const tScaleVal = bS * CFG.glassesScale;
-      const tScale = new THREE.Vector3(tScaleVal, tScaleVal, tScaleVal);
-
-      // O wrapper do modelo é centrado no meio da armação, e as astes ocupam
-      // toda a metade de trás. Para as LENTES caírem sobre os olhos, o centro
-      // precisa recuar metade da profundidade do modelo — na escala em que ele
-      // está sendo desenhado agora.
-      //
-      // Antes esse recuo era um valor fixo em pixels (adjDistance = -150), o que
-      // criava um braço de alavanca ao longo do eixo do nariz: como esse eixo
-      // gira junto com a cabeça, inclinar para baixo jogava os óculos para a
-      // testa e inclinar para cima jogava para o queixo, além de multiplicar o
-      // ruído do rastreamento. Derivando do modelo, o recuo é o mínimo
-      // necessário e acompanha o tamanho do rosto.
-      const depthHalf = (glassesGroup.userData && glassesGroup.userData.depthHalf) || 0;
-      const zOffset = -depthHalf * tScaleVal + (CFG.glassesDepth + depAdj + adjDistance) * fwNorm;
-
-      const tPos = eMid.clone()
-        .addScaledVector(xAxis, sc.centerX + adjLateral)
-        .addScaledVector(yAxis, adjHeight)
-        .addScaledVector(zAxis, zOffset);
-
-      let rotMat = new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis);
-      if (adjRotation !== 0) {
-        const tilt = new THREE.Matrix4().makeRotationZ(THREE.MathUtils.degToRad(adjRotation));
-        rotMat.multiply(tilt);
+    if (faces.length > 0) {
+      // Um conjunto de óculos + máscara por pessoa. Rostos que somem neste frame
+      // têm o seu slot escondido logo abaixo.
+      const taken = new Set();
+      for (let i = 0; i < faces.length && i < MAX_FACES; i++) {
+        const pts = toPixels(faces[i], video);
+        const f = computeFaceFrame(pts);
+        const slot = matchSlot(f.eMid, f.fW, taken);
+        if (!slot) continue;
+        taken.add(slot);
+        updateSlotFromFace(slot, f);
       }
-      const targetQuat = new THREE.Quaternion().setFromRotationMatrix(rotMat);
+      faceSlots.forEach(slot => { if (!taken.has(slot)) hideSlot(slot); });
 
+      // O scan inicial serve só para dar tempo do rastreamento estabilizar antes
+      // de mostrar os óculos, e vale para a cena toda (não por pessoa).
       if (!smooth.scanCompleted) {
         if (!smooth.scanning) {
           smooth.scanning = true;
@@ -1098,9 +1244,6 @@ function runPrediction() {
           scanStatus.textContent = 'Escaneando...';
           scanProgressBar.style.width = '0%';
         }
-        // O scan serve só para dar tempo do tracking estabilizar antes de mostrar
-        // os óculos; a profundidade não é mais calibrada aqui (era o refNoseZ,
-        // que amarrava a posição à distância em que a pessoa estava no scan).
         smooth.scanFrames.push(1);
         const pct = Math.min(smooth.scanFrames.length / 10, 1) * 100;
         scanProgressBar.style.width = pct + '%';
@@ -1113,215 +1256,13 @@ function runPrediction() {
         }
       }
 
-      const avgPos = tPos.clone();
-      const mov = avgPos.distanceTo(smooth.prev);
-      smooth.prev.copy(avgPos);
-
-      // O fator do lerp é quanto do caminho até o alvo se percorre por frame:
-      // 1.0 = pula direto (nenhum filtro), valores baixos = mais suave. Estava em
-      // 0.97, ou seja praticamente sem filtro, e todo o tremor do rastreamento
-      // aparecia na tela. A base baixa segura o tremor parado; o termo de
-      // movimento devolve a resposta rápida quando a pessoa realmente se mexe.
-      const S = window.SMOOTH;
-      const aP = clamp(S.pos + mov * S.posBoost, S.pos, S.posMax);
-      const aS = clamp(S.scale + mov * S.posBoost, S.scale, S.posMax);
-
-      if (!smooth.readyPos) {
-        smooth.pos.copy(avgPos);
-        smooth.scale.copy(tScale);
-        smooth.readyPos = true;
-      } else {
-        smooth.pos.lerp(avgPos, aP);
-        smooth.scale.lerp(tScale, aS);
-      }
-
-      if (!smooth.readyRot) {
-        smooth.quat.copy(targetQuat);
-        smooth.readyRot = true;
-      } else {
-        const aR = qDelta(smooth.quat, targetQuat);
-        smooth.quat.slerp(targetQuat, clamp(S.rot + aR * S.rotBoost, S.rot, S.rotMax));
-      }
-
       const fi = document.getElementById('face-info');
-      if (fi) { fi.textContent = `Formato: detectado`; fi.classList.remove('hidden'); }
-
-      glassesGroup.position.copy(smooth.pos);
-      glassesGroup.quaternion.copy(smooth.quat);
-      glassesGroup.scale.copy(smooth.scale);
-      if (!glassesGroup.visible) glassesGroup.visible = true;
-      glassesGroup.updateWorldMatrix(true, true);
-
-      // ===== Occluder (máscara invisível da cabeça) =====
-      if (occluder) {
-        const O = window.OCC;
-        // Centro da cabeça = ponto médio dos olhos, deslocado para trás do rosto
-        const headCenter = eMid.clone().addScaledVector(zAxis, -O.back * fW);
-        occluder.position.copy(headCenter);
-        // Orientação alinhada aos eixos da cabeça
-        const occBasis = new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis);
-        occluder.quaternion.setFromRotationMatrix(occBasis);
-        // Tamanho do elipsoide (esfera unitária escalada)
-        occluder.scale.set(O.rx * fW, O.ry * fH, O.rz * fW);
-        occluder.visible = true;
-
-        const m = occluder.material;
-
-        // A máscara só deve esconder o que está ATRÁS do rosto. Ela gira junto
-        // com a cabeça, então com a cabeça muito abaixada ou levantada o raio
-        // maior do elipsoide (o vertical, ry * fH) passa a apontar para a câmera,
-        // invade a frente do rosto e apaga as DUAS astes de uma vez. Cortar a
-        // metade dianteira resolve isso: o corte só reduz oclusão, nunca aumenta,
-        // então o giro lateral continua escondendo a aste oposta como antes.
-        if (O.clip) {
-          const planePoint = eMid.clone().addScaledVector(zAxis, O.front * fW);
-          occFrontPlane.setFromNormalAndCoplanarPoint(zAxis.clone().negate(), planePoint);
-          if (m.clippingPlanes !== occClipPlanes) {
-            m.clippingPlanes = occClipPlanes;
-            m.needsUpdate = true;
-          }
-        } else if (m.clippingPlanes && m.clippingPlanes.length) {
-          m.clippingPlanes = [];
-          m.needsUpdate = true;
-        }
-
-        // Modo debug: mostra a máscara em vermelho semitransparente para ajuste.
-        // Só reconfigura o material quando o modo muda — needsUpdate a cada frame
-        // recompila o shader sem necessidade.
-        if (m.userData.debugApplied !== O.debug) {
-          m.userData.debugApplied = O.debug;
-          if (O.debug) {
-            m.colorWrite = true;
-            m.transparent = true;
-            m.opacity = 0.45;
-            m.color.set(0xff0033);
-          } else {
-            m.colorWrite = false;
-            m.transparent = false;
-            m.opacity = 1.0;
-          }
-          m.needsUpdate = true;
-        }
-      }
-
-      try {
-        const yaw = Math.atan2(zAxis.x, zAxis.z);
-        const absYaw = Math.abs(yaw);
-        const pitch = Math.asin(clamp(-zAxis.y, -1, 1));
-        const absPitch = Math.abs(pitch);
-
-        const PITCH_START = 0.15;
-        const PITCH_FULL = 0.45;
-        const YAW_START = 0.08;
-        const YAW_FULL = 0.25;
-
-        const pitchFade = clamp((absPitch - PITCH_START) / (PITCH_FULL - PITCH_START), 0, 1);
-        const yawFade = clamp((absYaw - YAW_START) / (YAW_FULL - YAW_START), 0, 1);
-
-        const ud = glassesGroup.userData || {};
-        const leftMat = ud.leftTempleMat;
-        const rightMat = ud.rightTempleMat;
-        const fMat = ud.frameMat;
-
-        let leftMesh = ud.leftTempleMesh;
-        let rightMesh = ud.rightTempleMesh;
-
-        if (!leftMesh || !rightMesh) {
-          glassesGroup.traverse(c => {
-            if (c.isMesh) {
-              const n = (c.name || '').toLowerCase();
-              if (n.includes('lefttemple') || n.includes('left_arm') || n.includes('left_haste')) leftMesh = c;
-              if (n.includes('righttemple') || n.includes('right_arm') || n.includes('right_haste')) rightMesh = c;
-            }
-          });
-        }
-
-        const hasSeparateTemples = !!(leftMesh && rightMesh);
-
-        // Astes sempre 100% visíveis - o occluder (máscara da cabeça) cuida de
-        // esconder automaticamente a aste que fica atrás da cabeça ao girar o rosto.
-        let leftOp = 1.0, rightOp = 1.0;
-
-        if (hasSeparateTemples) {
-          leftMesh.visible = leftOp > 0.01;
-          rightMesh.visible = rightOp > 0.01;
-
-          if (leftMat) {
-            leftMat.transparent = leftOp < 0.99;
-            leftMat.opacity = leftOp;
-            leftMat.needsUpdate = true;
-          }
-          if (rightMat) {
-            rightMat.transparent = rightOp < 0.99;
-            rightMat.opacity = rightOp;
-            rightMat.needsUpdate = true;
-          }
-          if (fMat) {
-            fMat.clippingPlanes = [];
-            fMat.transparent = false;
-            fMat.opacity = 1.0;
-            fMat.needsUpdate = true;
-          }
-        } else {
-          const frameOp = Math.min(leftOp, rightOp);
-          const allMats = [fMat, leftMat, rightMat].filter(Boolean);
-
-          if (frameOp < 0.99) {
-            allMats.forEach(m => {
-              if (!m._origTransparent) {
-                m._origTransparent = m.transparent;
-                m._origOpacity = m.opacity;
-              }
-              m.transparent = true;
-              m.opacity = frameOp;
-              m.depthWrite = frameOp > 0.7;
-              m.needsUpdate = true;
-            });
-          } else {
-            allMats.forEach(m => {
-              if (m._origTransparent !== undefined) {
-                m.transparent = m._origTransparent;
-                m.opacity = m._origOpacity;
-                delete m._origTransparent;
-                delete m._origOpacity;
-              } else {
-                m.transparent = false;
-                m.opacity = 1.0;
-              }
-              m.depthWrite = true;
-              m.clippingPlanes = [];
-              m.needsUpdate = true;
-            });
-          }
-        }
-      } catch (e) {
-        console.warn('[TEMPLE] Error:', e);
+      if (fi) {
+        fi.textContent = taken.size > 1 ? `${taken.size} pessoas` : 'Formato: detectado';
+        fi.classList.remove('hidden');
       }
     } else {
-      if (glassesGroup) glassesGroup.visible = false;
-      if (occluder) occluder.visible = false;
-      const ud2 = glassesGroup?.userData;
-      const cleanMats = [ud2?.leftTempleMat, ud2?.rightTempleMat, ud2?.frameMat].filter(Boolean);
-      cleanMats.forEach(m => {
-        if (m._origTransparent !== undefined) {
-          m.transparent = m._origTransparent;
-          m.opacity = m._origOpacity;
-          delete m._origTransparent;
-          delete m._origOpacity;
-        } else {
-          m.transparent = false;
-          m.opacity = 1.0;
-        }
-        m.depthWrite = true;
-        m.needsUpdate = true;
-      });
-      if (ud2?.leftTempleMat && ud2.tipClipLeft) ud2.leftTempleMat.clippingPlanes = ud2.tipClipLeft;
-      if (ud2?.rightTempleMat && ud2.tipClipRight) ud2.rightTempleMat.clippingPlanes = ud2.tipClipRight;
-      if (ud2?.frameMat) ud2.frameMat.clippingPlanes = [];
-      if (ud2?.leftTempleMesh) ud2.leftTempleMesh.visible = true;
-      if (ud2?.rightTempleMesh) ud2.rightTempleMesh.visible = true;
-      smooth.readyPos = false;
-      smooth.readyRot = false;
+      faceSlots.forEach(hideSlot);
       smooth.scanning = false;
       smooth.scanCompleted = false;
       smooth.scanFrames = [];
@@ -1518,8 +1459,7 @@ function stopStream() {
   videoSprite = null;
   predictionInFlight = false;
   isActive = false;
-  smooth.readyPos = false;
-  smooth.readyRot = false;
+  faceSlots.forEach(hideSlot);
   smooth.scanning = false;
   smooth.scanCompleted = false;
   smooth.scanFrames = [];
