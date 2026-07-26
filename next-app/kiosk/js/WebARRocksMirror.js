@@ -51,6 +51,15 @@ const WebARRocksMirror = (function(){
     // temporal anti aliasing. Number of samples. 0 -> disabled:
     taaLevel: 0,
 
+    // glasses placement, in dev/face.obj units (tweak live with window.GLS):
+    glassesScale: 78, // head width in the glasses model is 2, face.obj is 154 -> 77
+    glassesPosition: [0, 40, 53], // origin = nose bridge. +Y -> up, +Z -> forward
+    glassesRotationX: -0.3, // in radians. - -> rotate branches down
+
+    // occluder (head mask) adjustment, in dev/face.obj units (tweak live with window.OCC):
+    occluderScale: 1.0, // < 1 -> shrink the mask so it stops covering the frame
+    occluderOffset: [0, 0, 0], // -Z -> push the mask backward, away from the frame
+
     // branch fading and bending:
     branchFadingZ: -0.9, // where to start branch fading. - -> to the back
     branchFadingTransition: 0.6, // 0 -> hard transition
@@ -142,18 +151,21 @@ const WebARRocksMirror = (function(){
       // the width of the head in the glasses 3D model is 2
       // and the width of the face in dev/face.obj is 154
       // so we need to scale the 3D model to 154/2 = 70
-      threeFaceAccessory.scale.multiplyScalar(78);
+      // (keep the model own scale apart so window.GLS can rescale it live)
+      threeFaceAccessory.userData.baseScale = threeFaceAccessory.scale.clone();
+      threeFaceAccessory.scale.multiplyScalar(_spec.glassesScale);
 
       // the origin of the glasses 3D model is the point supporting the glasses
       // (on the base of the nose)
       // its position in dev/face.obj is [0, 47, 53]
       // +Y -> move up
-      threeFaceAccessory.position.set(0, 40, 150);
+      const p = _spec.glassesPosition;
+      threeFaceAccessory.position.set(p[0], p[1], p[2]);
 
       // in dev/face.obj the face is looking upward,
       // whereas in the glasses model the branches are parallel to the ground
       // so we need to rotate the glasses 3D model to look upward
-      threeFaceAccessory.rotation.set(-0.3, 0, 0); //X neg -> rotate branches down
+      threeFaceAccessory.rotation.set(_spec.glassesRotationX, 0, 0); //X neg -> rotate branches down
     }
 
     // Tweak materials:
@@ -300,12 +312,134 @@ const WebARRocksMirror = (function(){
     // callback function:
     _threeInstances.loadingManager.onLoad = function(){
       console.log('INFO in WebARRocksMirror: everything has been loaded');
+      apply_occluderTransform();
+      apply_glassesTransform();
+      build_tuningAPI();
       if (_spec.callback){
         _spec.callback(_threeInstances);
       }
     }
   } //end build_scene()
- 
+
+
+  // ---- live tuning from the browser console: window.OCC and window.GLS ----
+  // the occluder and the glasses are cloned into each face follower,
+  // so every tweak has to be applied to all the clones.
+  function get_occluderMeshes(){
+    const meshes = [];
+    if (!_WARFObjects || !_WARFObjects.threeFaceFollowers) return meshes;
+    _WARFObjects.threeFaceFollowers.forEach(function(threeFaceFollower){
+      threeFaceFollower.traverse(function(threeNode){
+        if (threeNode.userData && threeNode.userData.isOccluder){
+          meshes.push(threeNode);
+        }
+      });
+    });
+    return meshes;
+  }
+
+  function get_accessoryRoots(){
+    const roots = [];
+    if (!_WARFObjects || !_WARFObjects.threeFaceFollowers) return roots;
+    _WARFObjects.threeFaceFollowers.forEach(function(threeFaceFollower){
+      threeFaceFollower.children.forEach(function(child){
+        if (!child.userData || !child.userData.isOccluder){
+          roots.push(child);
+        }
+      });
+    });
+    return roots;
+  }
+
+  function apply_occluderTransform(){
+    const o = _spec.occluderOffset;
+    get_occluderMeshes().forEach(function(mesh){
+      mesh.scale.setScalar(_spec.occluderScale);
+      mesh.position.set(o[0], o[1], o[2]);
+    });
+  }
+
+  function apply_glassesTransform(){
+    if (!_spec.isGlasses) return;
+    const p = _spec.glassesPosition;
+    get_accessoryRoots().forEach(function(root){
+      const baseScale = root.userData.baseScale;
+      if (baseScale){
+        root.scale.copy(baseScale).multiplyScalar(_spec.glassesScale);
+      } else {
+        root.scale.setScalar(_spec.glassesScale);
+      }
+      root.position.set(p[0], p[1], p[2]);
+      root.rotation.set(_spec.glassesRotationX, 0, 0);
+    });
+  }
+
+  function set_occluderDebug(isDebug){
+    _spec.debugOccluder = isDebug;
+    get_occluderMeshes().forEach(function(mesh){
+      if (isDebug){
+        if (!mesh.userData.debugMaterial){
+          mesh.geometry.computeVertexNormals();
+          mesh.userData.debugMaterial = new THREE.MeshNormalMaterial({side: THREE.DoubleSide});
+        }
+        mesh.userData.occluderMaterial = mesh.userData.occluderMaterial || mesh.material;
+        mesh.material = mesh.userData.debugMaterial;
+      } else if (mesh.userData.occluderMaterial){
+        mesh.material = mesh.userData.occluderMaterial;
+      }
+    });
+  }
+
+  function build_tuningAPI(){
+    function bind(target, key, specKey, indexOrNull, onSet){
+      Object.defineProperty(target, key, {
+        get: function(){
+          return (indexOrNull === null) ? _spec[specKey] : _spec[specKey][indexOrNull];
+        },
+        set: function(value){
+          if (indexOrNull === null){
+            _spec[specKey] = value;
+          } else {
+            _spec[specKey][indexOrNull] = value;
+          }
+          onSet();
+        }
+      });
+    }
+
+    const OCC = {
+      print: function(){
+        console.log('occluderScale: ' + _spec.occluderScale
+          + ',\noccluderOffset: [' + _spec.occluderOffset.join(', ') + '],');
+      }
+    };
+    bind(OCC, 'scale', 'occluderScale', null, apply_occluderTransform);
+    bind(OCC, 'x', 'occluderOffset', 0, apply_occluderTransform);
+    bind(OCC, 'y', 'occluderOffset', 1, apply_occluderTransform);
+    bind(OCC, 'z', 'occluderOffset', 2, apply_occluderTransform);
+    Object.defineProperty(OCC, 'debug', {
+      get: function(){ return _spec.debugOccluder; },
+      set: function(value){ set_occluderDebug(value); }
+    });
+    window.OCC = OCC;
+
+    const GLS = {
+      print: function(){
+        console.log('glassesScale: ' + _spec.glassesScale
+          + ',\nglassesPosition: [' + _spec.glassesPosition.join(', ') + ']'
+          + ',\nglassesRotationX: ' + _spec.glassesRotationX + ',');
+      }
+    };
+    bind(GLS, 'scale', 'glassesScale', null, apply_glassesTransform);
+    bind(GLS, 'x', 'glassesPosition', 0, apply_glassesTransform);
+    bind(GLS, 'y', 'glassesPosition', 1, apply_glassesTransform);
+    bind(GLS, 'z', 'glassesPosition', 2, apply_glassesTransform);
+    bind(GLS, 'rotX', 'glassesRotationX', null, apply_glassesTransform);
+    window.GLS = GLS;
+
+    console.log('[WebARRocksMirror] ajuste ao vivo: OCC.scale / OCC.z / OCC.debug e GLS.z / GLS.y / GLS.scale. Use OCC.print() e GLS.print() para copiar os valores.');
+  }
+
 
   // public functions:
   const that = {
@@ -459,6 +593,5 @@ const WebARRocksMirror = (function(){
   }; //end that
   return that;
 })();
-
 
 
