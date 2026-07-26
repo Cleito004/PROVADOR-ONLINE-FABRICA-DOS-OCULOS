@@ -107,8 +107,14 @@ window.OCC = {
 // cresce conforme o rosto gira, ficando parecida com um óculos de verdade.
 // A aste oposta nunca muda: continua escondida atrás da cabeça.
 // O crescimento é gradual; a volta é imediata, como pedido.
+//
+// DESLIGADO por padrão: o efeito depende do recorte feito por splitFrameMesh, e
+// esse recorte não separa a aste inteira — o trecho colado na dobradiça continua
+// junto da armação. Com o efeito ligado, a ponta cresce, escapa da máscara e
+// aparece flutuando, com um vão até a armação (pior que a aste curta).
+// Para voltar a mexer nisso, o caminho é corrigir o recorte antes, não o efeito.
 window.TEMPLE = {
-  enabled: true,
+  enabled: false,
   growth: 0.9,     // quanto a aste chega a crescer, de perfil (0.9 = +90%)
   rise: 0.12,      // velocidade do crescimento por frame (menor = mais suave)
   yawStart: 0.20,  // a partir de quanto de giro a aste começa a crescer (seno do yaw)
@@ -1151,7 +1157,26 @@ function applyTempleReveal(slot, f) {
   const left = ud.leftTempleMesh;
   const right = ud.rightTempleMesh;
   // Só funciona quando o modelo pôde ser separado em armação + duas astes.
-  if (!T.enabled || !left || !right || !ud.templeGrow) return;
+  if (!left || !right || !ud.templeGrow) return;
+
+  // Desligado: devolve as astes ao estado normal, para dar e tirar o efeito pelo
+  // console sem precisar recarregar a página.
+  if (!T.enabled) {
+    if (ud.templeGrow.left !== 1 || ud.templeGrow.right !== 1) {
+      [left, right].forEach(mesh => {
+        mesh.scale.z = 1;
+        mesh.position.z = 0;
+        mesh.renderOrder = 1;
+        if (!mesh.material.depthTest) {
+          mesh.material.depthTest = true;
+          mesh.material.needsUpdate = true;
+        }
+      });
+      ud.templeGrow.left = 1;
+      ud.templeGrow.right = 1;
+    }
+    return;
+  }
 
   const sin = clamp(f.xAxis.z, -1, 1);
   const amount = clamp((Math.abs(sin) - T.yawStart) / (1 - T.yawStart), 0, 1);
