@@ -140,11 +140,16 @@ window.TEMPLE = {
   enabled: true,
   reveal: 0.55,    // quanto a máscara recua de perfil (soma em OCC.frontGap)
   rise: 0.10,      // velocidade do crescimento por frame (menor = mais suave)
+  // A aste que fica do lado de trás é apagada de propósito, além de ficar atrás
+  // da máscara. Depender só da máscara não basta: para descobrir a aste da
+  // frente ela precisa recuar, e recuando acaba descobrindo a de trás também.
+  hideStart: 0.22, // giro a partir do qual a aste de trás começa a sumir
+  hideFade: 0.18,  // velocidade do sumiço (menor = mais suave)
   // Recuar a máscara descobre a aste dos DOIS lados. Com o rosto quase de frente
   // nenhuma delas está atrás da cabeça ainda, então recuar cedo faz aparecerem as
   // duas. Por isso a revelação só começa com o rosto já claramente virado: aí a
   // aste oposta já passou para trás e continua escondida.
-  yawStart: 0.38,  // a partir de quanto de giro começa a revelar (seno do yaw)
+  yawStart: 0.25,  // a partir de quanto de giro começa a revelar (seno do yaw)
 };
 
 // Tamanho dos óculos no rosto, como multiplicador do tamanho calibrado.
@@ -841,6 +846,8 @@ function createFaceSlot() {
     },
     anchor: new THREE.Vector3(), // meio dos olhos no frame anterior
     templeReveal: 0,             // o quanto a aste está revelada (ver window.TEMPLE)
+    opEsq: 1,                    // opacidade das astes: a de tras e apagada ao virar
+    opDir: 1,
     inUse: false,
   };
   slot.glasses.visible = false;
@@ -877,6 +884,18 @@ function matchSlot(eMid, fW, taken) {
   if (faceSlots.length < MAX_FACES) return createFaceSlot();
   return null;
 }
+
+// Diagnóstico pelo console: diz se cada modelo pôde ser dividido em três partes
+// (aste, armação, aste). É essa divisão que permite apagar a aste de trás; sem
+// ela, aquele modelo depende só da máscara para escondê-la.
+window.diagAstes = function () {
+  STYLES.forEach(estilo => {
+    const g = buildFromModel(estilo, currentColor, currentLensColor, currentLensOpacity);
+    const ok = !!(g.userData.leftTempleMesh && g.userData.rightTempleMesh);
+    console.log(`[diag] ${estilo}: ${ok ? 'dividido em 3 partes (ok)' : 'NAO dividido - aste de tras fica so por conta da mascara'}`);
+    disposeObject3D(g);
+  });
+};
 
 function rebuildGlasses() {
   if (!scene) return;
@@ -1181,6 +1200,62 @@ function updateOccluder(slot, f) {
   }
 }
 
+// Apaga a aste que ficou do lado de trás quando o rosto vira.
+// O modelo já vem separado em três partes por splitFrameMesh (aste esquerda,
+// armação + lentes, aste direita), então dá para sumir com uma delas sem tocar
+// no resto — cada aste tem o seu próprio material.
+//
+// Qual delas está atrás é decidido pela posição REAL de cada uma na cena, e não
+// pelo lado do modelo: a câmera olha de frente, então a aste com menor Z é a
+// mais distante. Assim não importa a convenção de eixos do GLB nem para que lado
+// a pessoa virou — não há sinal para inverter por engano.
+const _centroAste = new THREE.Vector3();
+
+function centroNaCena(mesh) {
+  if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+  return mesh.geometry.boundingBox.getCenter(_centroAste).applyMatrix4(mesh.matrixWorld);
+}
+
+function applyTempleFade(slot, f) {
+  const ud = slot.glasses.userData;
+  const esq = ud.leftTempleMesh;
+  const dir = ud.rightTempleMesh;
+  const matEsq = ud.leftTempleMat;
+  const matDir = ud.rightTempleMat;
+  // Sem a separação em três partes não há o que apagar; quem esconde a aste
+  // nesse caso continua sendo só a máscara.
+  if (!esq || !dir || !matEsq || !matDir) return;
+
+  const T = window.TEMPLE;
+  const giro = Math.abs(clamp(f.xAxis.z, -1, 1));
+  const sumindo = T.enabled && giro > T.hideStart;
+
+  const zEsq = centroNaCena(esq).z;
+  const zDir = centroNaCena(dir).z;
+  const atrasEhEsquerda = zEsq < zDir;
+
+  [[esq, matEsq, 'opEsq', atrasEhEsquerda], [dir, matDir, 'opDir', !atrasEhEsquerda]].forEach(
+    ([mesh, mat, chave, estaAtras]) => {
+      const alvo = (sumindo && estaAtras) ? 0 : 1;
+      const atual = slot[chave];
+      const novo = atual + (alvo - atual) * T.hideFade;
+      slot[chave] = Math.abs(novo - alvo) < 0.01 ? alvo : novo;
+
+      mat.opacity = slot[chave];
+      mat.depthWrite = slot[chave] > 0.5;
+      mesh.visible = slot[chave] > 0.02;
+
+      // Trocar `transparent` exige recompilar o shader, então só quando muda de
+      // fato — fazer isso a cada frame derrubaria o desempenho.
+      const precisaTransparencia = slot[chave] < 0.999;
+      if (mat.transparent !== precisaTransparencia) {
+        mat.transparent = precisaTransparencia;
+        mat.needsUpdate = true;
+      }
+    }
+  );
+}
+
 function updateSlotFromFace(slot, f) {
   const sc = STYLE_CONFIG[currentStyle] || STYLE_CONFIG.square;
 
@@ -1268,6 +1343,8 @@ function updateSlotFromFace(slot, f) {
   slot.glasses.scale.copy(m.scale);
   slot.glasses.visible = true;
   slot.glasses.updateWorldMatrix(true, true);
+
+  applyTempleFade(slot, f);
 
   slot.anchor.copy(f.eMid);
   slot.inUse = true;
