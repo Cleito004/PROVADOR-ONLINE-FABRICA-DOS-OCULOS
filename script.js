@@ -110,13 +110,25 @@ window.OCC = {
   // ocluir justamente onde foi cortada. Era o que fazia as astes reaparecerem
   // soltas ao lado do rosto quando a cabeça inclinava.
   //
-  // O rx precisa ser generoso: sendo um elipsoide, a máscara fecha rápido nas
-  // laterais, que é justo por onde as astes correm. Cabeça real é mais cilíndrica
-  // ali. Valores conferidos em dev/teste-mascara.html (frente, yaw 35/60, pitch 30/40).
-  rx: 1.10,        // raio horizontal (x largura do rosto)
+  // O rx era 1.10 — RAIO em larguras de rosto, ou seja uma máscara com 2,2
+  // larguras de rosto, mais que o dobro de uma cabeça. As astes correm em ±0.5,
+  // então ficavam enterradas fundo dentro dela SEMPRE: era isso que deixava a
+  // aste curta em todos os ângulos, e não o tamanho do modelo. O rx foi inflado
+  // para compensar o elipsoide fechar rápido nas laterais, e a compensação saiu
+  // pior que o defeito (daí ter surgido o recuo da máscara, remendo do remendo).
+  //
+  // Agora a máscara é mais ESTREITA que a linha das astes: elas passam por fora
+  // e nunca são engolidas. Quem esconde a aste de trás é applyTempleFade, por
+  // profundidade real. Cada mecanismo com um trabalho só, sem gangorra entre eles.
+  rx: 0.45,        // raio horizontal (x largura do rosto) - menor que as astes (0.5)
   ry: 0.62,        // raio vertical (x altura do rosto)
   rz: 1.00,        // raio de profundidade (x largura do rosto)
   frontGap: 0.15,  // folga entre a frente da máscara e a armação (x largura do rosto)
+  // Cabeça é mais caixa arredondada que bola. Este é o expoente da superelipse da
+  // seção horizontal (ver geometriaCabeca): 2 = elipsoide puro, maior = lateral
+  // mais reta, mantendo profundidade até perto da borda em vez de afinar. É o que
+  // evita ter de inflar o rx de novo para compensar a forma.
+  lados: 4.0,
 };
 
 // Aste do lado que o rosto mostra. O modelo tem astes curtas, e a máscara da
@@ -138,18 +150,27 @@ window.OCC = {
 // máscara recuada: na tela cresce só a aste do lado para onde o rosto virou.
 window.TEMPLE = {
   enabled: true,
-  reveal: 0.55,    // quanto a máscara recua de perfil (soma em OCC.frontGap)
-  rise: 0.10,      // velocidade do crescimento por frame (menor = mais suave)
-  // A aste que fica do lado de trás é apagada de propósito, além de ficar atrás
-  // da máscara. Depender só da máscara não basta: para descobrir a aste da
-  // frente ela precisa recuar, e recuando acaba descobrindo a de trás também.
-  hideStart: 0.22, // giro a partir do qual a aste de trás começa a sumir
-  hideFade: 0.18,  // velocidade do sumiço (menor = mais suave)
-  // Recuar a máscara descobre a aste dos DOIS lados. Com o rosto quase de frente
-  // nenhuma delas está atrás da cabeça ainda, então recuar cedo faz aparecerem as
-  // duas. Por isso a revelação só começa com o rosto já claramente virado: aí a
-  // aste oposta já passou para trás e continua escondida.
-  yawStart: 0.25,  // a partir de quanto de giro começa a revelar (seno do yaw)
+
+  // ONDE A ASTE COMEÇA, no corte da malha (fração da profundidade do modelo).
+  // Não é valor calibrado a olho: varrendo 0.15..0.50 nos três GLBs existe um
+  // platô em 0.20..0.30 em que o corte devolve exatamente as mesmas 126
+  // triângulos por aste nos três modelos. A aste é uma peça separada da malha, e
+  // qualquer valor dessa faixa a pega inteira e sem aro. 0.25 é o meio do platô.
+  cutZ: 0.25,
+
+  // QUAL ASTE APAGAR, e quanto: pela diferença de PROFUNDIDADE REAL entre as
+  // duas na cena, normalizada pela largura do rosto. Antes o gatilho era só o
+  // seno do yaw, o que obrigava a inventar um limiar por eixo e falhava em
+  // movimento combinado (baixo + esquerda). A diferença de profundidade já
+  // embute yaw, pitch e roll juntos, em uma conta só:
+  //   rosto reto  -> as duas na mesma profundidade -> diferença 0 -> as duas aparecem
+  //   virou       -> uma afunda                    -> ela apaga
+  // Como é geometria e não limiar, não existe caso especial para acrescentar, e o
+  // bug antigo de "cabeça toda abaixada some as duas astes" fica impossível por
+  // construção: pitch puro mantém as duas na mesma profundidade.
+  hideStart: 0.08, // diferença a partir da qual a aste de trás começa a sumir
+  hideFull: 0.20,  // diferença em que ela já está 100% invisível (~11° de giro)
+  hideFade: 0.35,  // suavização por frame; alto porque o pedido é sumir rápido
 };
 
 // Tamanho dos óculos no rosto, como multiplicador do tamanho calibrado.
@@ -538,7 +559,13 @@ async function loadAllModels() {
   }));
 }
 
-function splitFrameMesh(mesh, frameMat, leftMat, rightMat, modelHalfW) {
+// modelMinZ/modelMaxZ são a profundidade do MODELO INTEIRO, não desta malha. É
+// obrigatório: no cateye as astes vivem numa primitiva separada, cuja própria
+// profundidade é só o pedaço de trás — medindo a si mesma, o limiar cairia dentro
+// da aste e cortaria fora quase toda ela.
+// geoHalfW tem de vir em coordenadas de GEOMETRIA, as mesmas de posAttr (ver o
+// comentário em buildFromModel sobre o bug de unidade do corte antigo).
+function splitFrameMesh(mesh, frameMat, leftMat, rightMat, geoHalfW, modelMinZ, modelMaxZ) {
   const geo = mesh.geometry;
   const posAttr = geo.getAttribute('position');
   const normAttr = geo.getAttribute('normal');
@@ -546,44 +573,34 @@ function splitFrameMesh(mesh, frameMat, leftMat, rightMat, modelHalfW) {
   const idx = geo.getIndex();
   if (!posAttr || !idx || idx.count < 3) return null;
 
-  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-  for (let i = 0; i < posAttr.count; i++) {
-    const x = posAttr.getX(i);
-    const z = posAttr.getZ(i);
-    if (x < minX) minX = x;
-    if (x > maxX) maxX = x;
-    if (z < minZ) minZ = z;
-    if (z > maxZ) maxZ = z;
-  }
+  const minZ = modelMinZ;
+  const maxZ = modelMaxZ;
 
-  const xSplit = modelHalfW * 0.32;
-  const zMid = (minZ + maxZ) / 2;
+  // Aste é a parte que corre PARA TRÁS da armação — não "o terço lateral". O
+  // corte antigo era por X (|x| > 0.32 da meia-largura), e medindo os três GLBs
+  // isso punha na fatia chamada de "aste" 37% de todos os triângulos, dos quais
+  // ~60% eram aro da lente. Apagar essa fatia deformava a armação, então o
+  // apagamento nunca pôde ser agressivo o bastante para a aste sumir de verdade.
+  //
+  // Agora o critério primário é a profundidade (é isso que distingue aste de aro),
+  // e o X só decide de que lado ela está. O limiar vive em TEMPLE.cutZ e cai no
+  // meio de um platô medido nos três modelos — ver o comentário lá.
+  const zLim = maxZ - (maxZ - minZ) * window.TEMPLE.cutZ;
+  const xGuard = geoHalfW * 0.25;
   const leftTris = [], frameTris = [], rightTris = [];
   for (let i = 0; i < idx.count; i += 3) {
     const a = idx.getX(i), b = idx.getX(i + 1), c = idx.getX(i + 2);
     const avgX = (posAttr.getX(a) + posAttr.getX(b) + posAttr.getX(c)) / 3;
-    if (avgX < -xSplit) leftTris.push(a, b, c);
-    else if (avgX > xSplit) rightTris.push(a, b, c);
+    const avgZ = (posAttr.getZ(a) + posAttr.getZ(b) + posAttr.getZ(c)) / 3;
+    const atras = avgZ < zLim;
+    if (atras && avgX < -xGuard) leftTris.push(a, b, c);
+    else if (atras && avgX > xGuard) rightTris.push(a, b, c);
     else frameTris.push(a, b, c);
   }
-  if (leftTris.length === 0 || rightTris.length === 0 || frameTris.length === 0) {
-    const leftTris2 = [], frameTris2 = [], rightTris2 = [];
-    for (let i = 0; i < idx.count; i += 3) {
-      const a = idx.getX(i), b = idx.getX(i + 1), c = idx.getX(i + 2);
-      const avgX = (posAttr.getX(a) + posAttr.getX(b) + posAttr.getX(c)) / 3;
-      const avgZ = (posAttr.getZ(a) + posAttr.getZ(b) + posAttr.getZ(c)) / 3;
-      const isBehind = avgZ < zMid - (maxZ - minZ) * 0.1;
-      if (isBehind && avgX < 0) leftTris2.push(a, b, c);
-      else if (isBehind && avgX > 0) rightTris2.push(a, b, c);
-      else frameTris2.push(a, b, c);
-    }
-    if (leftTris2.length > 0 && rightTris2.length > 0 && frameTris2.length > 0) {
-      leftTris.length = 0; frameTris.length = 0; rightTris.length = 0;
-      leftTris.push(...leftTris2); frameTris.push(...frameTris2); rightTris.push(...rightTris2);
-    } else {
-      return null;
-    }
-  }
+  // Malha sem aste alguma não é erro: no cateye as astes estão em OUTRA primitiva
+  // do arquivo, e quem chama percorre todas as malhas da armação. Só a fatia do
+  // meio pode sair vazia (numa malha que seja só aste), e isso também é válido.
+  if (leftTris.length === 0 || rightTris.length === 0) return null;
 
   const IndexArr = idx.count > 65535 ? Uint32Array : Uint16Array;
 
@@ -631,7 +648,8 @@ function splitFrameMesh(mesh, frameMat, leftMat, rightMat, modelHalfW) {
 
   const meshes = [
     { geo: leftGeo, mat: leftMat, name: 'leftTemple' },
-    { geo: frameGeo, mat: frameMat, name: 'frameCenter' },
+    // Sem fatia do meio (malha que é só aste) não se cria malha vazia à toa.
+    ...(frameTris.length ? [{ geo: frameGeo, mat: frameMat, name: 'frameCenter' }] : []),
     { geo: rightGeo, mat: rightMat, name: 'rightTemple' },
   ].map(({ geo: g, mat: m, name: n }) => {
     const ms = new THREE.Mesh(g, m);
@@ -645,7 +663,13 @@ function splitFrameMesh(mesh, frameMat, leftMat, rightMat, modelHalfW) {
     return ms;
   });
 
-  return { leftMesh: meshes[0], frameMesh: meshes[1], rightMesh: meshes[2], leftZ, rightZ };
+  const temFrente = frameTris.length > 0;
+  return {
+    leftMesh: meshes[0],
+    frameMesh: temFrente ? meshes[1] : null,
+    rightMesh: meshes[temFrente ? 2 : 1],
+    leftZ, rightZ,
+  };
 }
 
 function buildFromModel(style, frameColor, lensColor, lensOpacity) {
@@ -728,35 +752,54 @@ function buildFromModel(style, frameColor, lensColor, lensOpacity) {
 
   meshes.forEach(m => { m.renderOrder = 1; m.depthTest = true; m.scale.z = 1.25; });
 
-  let bestFrameMesh = null, bestXRange = 0;
-  frameMeshes.forEach(m => {
-    const b = new THREE.Box3().setFromObject(m);
-    const xR = b.max.x - b.min.x;
-    if (xR > bestXRange) { bestXRange = xR; bestFrameMesh = m; }
-  });
   const modelBox = new THREE.Box3().setFromObject(clone);
   const modelHalfW = (modelBox.max.x - modelBox.min.x) * 0.5;
 
-  let splitLeftMesh = null, splitRightMesh = null;
-  let splitLeftZ = null, splitRightZ = null;
-  if (bestFrameMesh && bestXRange > modelHalfW * 0.25) {
-    const split = splitFrameMesh(bestFrameMesh, frameMat, leftTempleMat, rightTempleMat, modelHalfW);
-    if (split) {
-      const parent = bestFrameMesh.parent;
-      parent.remove(bestFrameMesh);
-      parent.add(split.leftMesh);
+  // Medidas do modelo em coordenadas de GEOMETRIA, que é onde o corte trabalha.
+  // ATENÇÃO: não usar modelHalfW (vem de Box3.setFromObject) para comparar com
+  // posAttr.getX(). Era esse o bug do corte antigo: setFromObject já aplica a
+  // escala do node do GLB, então o limiar saía centenas de vezes maior que as
+  // coordenadas cruas, a condição por X nunca era verdadeira e TODO modelo caía no
+  // fallback por Z — que cortava a 60% da profundidade e só pegava a metade de
+  // trás da aste. A metade da frente ficava com a armação e nunca era apagada:
+  // era isso que fazia "a aste oposta não sumir".
+  // Todas as primitivas destes GLBs dividem o mesmo node, então unir as caixas das
+  // geometrias direto é válido.
+  let modelMinZ = Infinity, modelMaxZ = -Infinity;
+  let modelMinX = Infinity, modelMaxX = -Infinity;
+  frameMeshes.forEach(m => {
+    if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+    const bb = m.geometry.boundingBox;
+    modelMinZ = Math.min(modelMinZ, bb.min.z);
+    modelMaxZ = Math.max(modelMaxZ, bb.max.z);
+    modelMinX = Math.min(modelMinX, bb.min.x);
+    modelMaxX = Math.max(modelMaxX, bb.max.x);
+  });
+  const geoHalfW = (modelMaxX - modelMinX) * 0.5;
+
+  // Antes só a MAIOR malha era cortada. No cateye a maior é só a frente, e as
+  // astes ficam noutra primitiva — que nunca era tocada, então lá o apagamento da
+  // aste de trás não tinha como funcionar de jeito nenhum. Agora percorre todas, e
+  // cada lado acumula suas astes numa lista (um modelo pode trazer mais de uma).
+  const astesEsq = [], astesDir = [];
+  Array.from(frameMeshes).forEach(m => {
+    const split = splitFrameMesh(
+      m, frameMat, leftTempleMat, rightTempleMat, geoHalfW, modelMinZ, modelMaxZ
+    );
+    if (!split) return; // malha sem aste: fica inteira, como estava
+    const parent = m.parent;
+    parent.remove(m);
+    parent.add(split.leftMesh);
+    parent.add(split.rightMesh);
+    frameMeshes.delete(m);
+    // A fatia do meio pode sair vazia se a malha for só aste (caso do cateye).
+    if (split.frameMesh) {
       parent.add(split.frameMesh);
-      parent.add(split.rightMesh);
-      frameMeshes.delete(bestFrameMesh);
       frameMeshes.add(split.frameMesh);
-      splitLeftMesh = split.leftMesh;
-      splitRightMesh = split.rightMesh;
-      splitLeftZ = split.leftZ;
-      splitRightZ = split.rightZ;
-    } else {
     }
-  } else {
-  }
+    astesEsq.push(split.leftMesh);
+    astesDir.push(split.rightMesh);
+  });
 
   // Aqui existiam planos de corte para aparar a ponta das astes. Planos do
   // Three.js são em coordenadas de MUNDO, não do modelo, então eles cortavam num
@@ -798,14 +841,15 @@ function buildFromModel(style, frameColor, lensColor, lensOpacity) {
   wrapper.userData.depthHalf = bSize.z * 0.5 * normFactor;
   wrapper.userData.halfW = bSize.x * 0.5;
   wrapper.userData.halfH = bSize.y * 0.5;
-  wrapper.userData.leftTempleMesh = splitLeftMesh;
-  wrapper.userData.rightTempleMesh = splitRightMesh;
-  // Z da dobradiça de cada aste (a extremidade da frente): é o ponto que fica
-  // parado quando a aste cresce, para ela não descolar da armação.
-  wrapper.userData.leftHingeZ = splitLeftZ ? splitLeftZ.maxZ : 0;
-  wrapper.userData.rightHingeZ = splitRightZ ? splitRightZ.maxZ : 0;
-  // Estado do crescimento, por aste (ver applyTempleReveal).
-  wrapper.userData.templeGrow = { left: 1, right: 1 };
+  // Listas, e não uma malha por lado: um modelo pode guardar a aste em mais de uma
+  // primitiva (o cateye guarda). Vazias = modelo que não se deixou cortar, e aí
+  // quem esconde a aste continua sendo só a máscara.
+  wrapper.userData.astesEsq = astesEsq;
+  wrapper.userData.astesDir = astesDir;
+  // Aqui ficavam leftHingeZ/rightHingeZ e templeGrow, do crescimento da aste
+  // (v4.25.0). O crescimento foi desligado no v4.25.1 porque a ponta escapava, e
+  // medindo os GLBs a aste tem ~70% da profundidade do modelo: ela nunca foi
+  // curta, era a máscara que a engolia. Estado morto, removido.
   wrapper.add(normGroup);
   return wrapper;
 }
@@ -821,12 +865,46 @@ function disposeObject3D(obj) {
   });
 }
 
+// Geometria da máscara: esfera de raio 1 com a SEÇÃO HORIZONTAL empurrada para
+// perto de um quadrado arredondado (superelipse), mantendo o perfil vertical
+// redondo. Vista de cima, uma cabeça é bem mais caixa que círculo: com círculo a
+// máscara perde profundidade rápido nas laterais, que é justo por onde as astes
+// correm — e foi para compensar isso que o rx tinha sido inflado a 1.10, o que
+// acabou engolindo as astes. Corrigir a forma é o que permite o rx ser realista.
+// Cache por expoente para dar ajuste ao vivo sem recriar malha a cada frame.
+const _geoCabeca = new Map();
+
+function geometriaCabeca(p) {
+  const chave = Math.round(p * 100) / 100;
+  if (_geoCabeca.has(chave)) return _geoCabeca.get(chave);
+
+  const geo = new THREE.SphereGeometry(1, 32, 24);
+  const pos = geo.getAttribute('position');
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), z = pos.getZ(i);
+    const r = Math.hypot(x, z);
+    if (r < 1e-6) continue; // polos: nada a deformar
+    // Leva a direção (x,z) do círculo até a borda da superelipse. p = 2 devolve a
+    // esfera original; p maior deixa a lateral mais reta.
+    const norma = Math.pow(
+      Math.pow(Math.abs(x / r), p) + Math.pow(Math.abs(z / r), p), 1 / p
+    );
+    const k = 1 / Math.max(norma, 1e-6);
+    pos.setX(i, x * k);
+    pos.setZ(i, z * k);
+  }
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+  _geoCabeca.set(chave, geo);
+  return geo;
+}
+
 function createFaceSlot() {
   // Máscara da cabeça: invisível na tela (colorWrite:false) mas escreve
   // profundidade, escondendo o que estiver atrás dela. renderOrder entre o vídeo
   // de fundo (0) e os óculos (1).
   const occluder = new THREE.Mesh(
-    new THREE.SphereGeometry(1, 32, 24),
+    geometriaCabeca(window.OCC.lados),
     new THREE.MeshBasicMaterial({ colorWrite: false })
   );
   occluder.renderOrder = 0.5;
@@ -845,9 +923,9 @@ function createFaceSlot() {
       prev: new THREE.Vector3(),
     },
     anchor: new THREE.Vector3(), // meio dos olhos no frame anterior
-    templeReveal: 0,             // o quanto a aste está revelada (ver window.TEMPLE)
     opEsq: 1,                    // opacidade das astes: a de tras e apagada ao virar
     opDir: 1,
+    templeDif: 0,                // diferença de profundidade entre as astes (diagnóstico)
     inUse: false,
   };
   slot.glasses.visible = false;
@@ -885,16 +963,38 @@ function matchSlot(eMid, fW, taken) {
   return null;
 }
 
-// Diagnóstico pelo console: diz se cada modelo pôde ser dividido em três partes
-// (aste, armação, aste). É essa divisão que permite apagar a aste de trás; sem
-// ela, aquele modelo depende só da máscara para escondê-la.
+// Diagnóstico pelo console: diz se as astes de cada modelo puderam ser separadas
+// da armação. É essa separação que permite apagar a aste de trás; sem ela, aquele
+// modelo depende só da máscara para escondê-la.
+// Devolve os dados além de imprimir, para poder ser conferido por script.
 window.diagAstes = function () {
-  STYLES.forEach(estilo => {
+  const res = STYLES.map(estilo => {
+    // Modelo ainda não carregado dá um grupo vazio, o que antes era relatado como
+    // "não separou" — falso negativo que confundia o diagnóstico com o defeito.
+    if (!MODEL_CACHE[estilo] || !MODEL_CACHE[estilo].scene) {
+      console.log(`[diag] ${estilo}: modelo ainda NAO CARREGADO (rode de novo em alguns segundos)`);
+      return { estilo, carregado: false };
+    }
     const g = buildFromModel(estilo, currentColor, currentLensColor, currentLensOpacity);
-    const ok = !!(g.userData.leftTempleMesh && g.userData.rightTempleMesh);
-    console.log(`[diag] ${estilo}: ${ok ? 'dividido em 3 partes (ok)' : 'NAO dividido - aste de tras fica so por conta da mascara'}`);
+    const contaTris = lista => (lista || []).reduce((s, m) => {
+      const i = m.geometry.getIndex();
+      return s + (i ? i.count / 3 : 0);
+    }, 0);
+    const d = {
+      estilo, carregado: true,
+      malhasEsq: (g.userData.astesEsq || []).length,
+      malhasDir: (g.userData.astesDir || []).length,
+      trisEsq: contaTris(g.userData.astesEsq),
+      trisDir: contaTris(g.userData.astesDir),
+    };
+    d.ok = d.malhasEsq > 0 && d.malhasDir > 0;
+    console.log(`[diag] ${estilo}: ${d.ok
+      ? `astes separadas - esq ${d.malhasEsq} malha(s)/${d.trisEsq} tri, dir ${d.malhasDir}/${d.trisDir} - apagamento por profundidade ativo`
+      : 'NAO separou - aste de tras fica so por conta da mascara'}`);
     disposeObject3D(g);
+    return d;
   });
+  return res;
 };
 
 function rebuildGlasses() {
@@ -1171,14 +1271,23 @@ function updateOccluder(slot, f) {
   // Recuo do centro = raio de profundidade + folga. Assim a frente do elipsoide
   // fica sempre frontGap x fW atrás do plano dos olhos, independentemente do
   // tamanho da máscara: ela nunca alcança a armação, e não precisa ser cortada.
-  const gap = O.frontGap + window.TEMPLE.reveal * slot.templeReveal;
-  const back = (O.rz + gap) * f.fW;
+  // Aqui a folga crescia com o giro (TEMPLE.reveal * slot.templeReveal): a máscara
+  // recuava para descobrir a aste da frente. Só que recuar descobre os DOIS lados,
+  // então precisava de um segundo mecanismo para reesconder a de trás, e os dois
+  // brigavam. Com a máscara mais estreita que a linha das astes o recuo não é mais
+  // necessário: a aste de cá nunca entra na máscara, e a de trás é apagada por
+  // applyTempleFade. Folga fixa, um mecanismo para cada trabalho.
+  const back = (O.rz + O.frontGap) * f.fW;
   occluder.position.copy(f.eMid).addScaledVector(f.zAxis, -back);
   occluder.quaternion.setFromRotationMatrix(
     new THREE.Matrix4().makeBasis(f.xAxis, f.yAxis, f.zAxis)
   );
   occluder.scale.set(O.rx * f.fW, O.ry * f.fH, O.rz * f.fW);
   occluder.visible = true;
+
+  // Permite mexer em OCC.lados pelo console: troca a malha só quando o valor muda.
+  const geoAtual = geometriaCabeca(O.lados);
+  if (occluder.geometry !== geoAtual) occluder.geometry = geoAtual;
 
   const m = occluder.material;
 
@@ -1201,14 +1310,14 @@ function updateOccluder(slot, f) {
 }
 
 // Apaga a aste que ficou do lado de trás quando o rosto vira.
-// O modelo já vem separado em três partes por splitFrameMesh (aste esquerda,
-// armação + lentes, aste direita), então dá para sumir com uma delas sem tocar
-// no resto — cada aste tem o seu próprio material.
+// splitFrameMesh já separou cada aste da armação, e cada lado tem o seu próprio
+// material, então dá para sumir com um lado sem tocar no resto.
 //
-// Qual delas está atrás é decidido pela posição REAL de cada uma na cena, e não
-// pelo lado do modelo: a câmera olha de frente, então a aste com menor Z é a
-// mais distante. Assim não importa a convenção de eixos do GLB nem para que lado
-// a pessoa virou — não há sinal para inverter por engano.
+// Qual lado está atrás sai da posição REAL na cena, não do lado do modelo: a
+// câmera olha de frente, então Z menor = mais longe. Assim não importa a convenção
+// de eixos do GLB nem para que lado a pessoa virou — não há sinal para inverter
+// por engano. E como a MESMA medida serve de gatilho e de intensidade, yaw, pitch,
+// roll e qualquer combinação deles entram na conta sem tratamento próprio.
 const _centroAste = new THREE.Vector3();
 
 function centroNaCena(mesh) {
@@ -1216,34 +1325,52 @@ function centroNaCena(mesh) {
   return mesh.geometry.boundingBox.getCenter(_centroAste).applyMatrix4(mesh.matrixWorld);
 }
 
+// Profundidade média de um lado. É média porque um lado pode ter mais de uma
+// malha de aste (o cateye tem).
+function mediaZ(malhas) {
+  let soma = 0;
+  for (const m of malhas) soma += centroNaCena(m).z;
+  return soma / malhas.length;
+}
+
 function applyTempleFade(slot, f) {
   const ud = slot.glasses.userData;
-  const esq = ud.leftTempleMesh;
-  const dir = ud.rightTempleMesh;
+  const esq = ud.astesEsq || [];
+  const dir = ud.astesDir || [];
   const matEsq = ud.leftTempleMat;
   const matDir = ud.rightTempleMat;
-  // Sem a separação em três partes não há o que apagar; quem esconde a aste
-  // nesse caso continua sendo só a máscara.
-  if (!esq || !dir || !matEsq || !matDir) return;
+  // Sem o corte em astes não há o que apagar; quem esconde a aste nesse caso
+  // continua sendo só a máscara.
+  if (!esq.length || !dir.length || !matEsq || !matDir) return;
 
   const T = window.TEMPLE;
-  const giro = Math.abs(clamp(f.xAxis.z, -1, 1));
-  const sumindo = T.enabled && giro > T.hideStart;
 
-  const zEsq = centroNaCena(esq).z;
-  const zDir = centroNaCena(dir).z;
-  const atrasEhEsquerda = zEsq < zDir;
+  // Profundidade de cada lado na CENA, normalizada pela largura do rosto para a
+  // conta não depender da distância da pessoa à câmera. Z maior = mais perto.
+  const zEsq = mediaZ(esq);
+  const zDir = mediaZ(dir);
+  const dif = (zEsq - zDir) / Math.max(f.fW, 1);
+
+  // Uma só rampa serve para os dois lados: o sinal da diferença já diz quem está
+  // atrás, e o módulo diz o quanto. Nenhum limiar por eixo, nenhum caso especial —
+  // é o que faz isso valer para cima, baixo, diagonal e combinações de uma vez.
+  const forca = T.enabled
+    ? clamp((Math.abs(dif) - T.hideStart) / Math.max(T.hideFull - T.hideStart, 1e-4), 0, 1)
+    : 0;
+  const atrasEhEsquerda = dif < 0;
+
+  slot.templeDif = dif; // exposto para o painel de ajuste e para diagnóstico
 
   [[esq, matEsq, 'opEsq', atrasEhEsquerda], [dir, matDir, 'opDir', !atrasEhEsquerda]].forEach(
-    ([mesh, mat, chave, estaAtras]) => {
-      const alvo = (sumindo && estaAtras) ? 0 : 1;
+    ([malhas, mat, chave, estaAtras]) => {
+      const alvo = estaAtras ? 1 - forca : 1;
       const atual = slot[chave];
       const novo = atual + (alvo - atual) * T.hideFade;
       slot[chave] = Math.abs(novo - alvo) < 0.01 ? alvo : novo;
 
       mat.opacity = slot[chave];
       mat.depthWrite = slot[chave] > 0.5;
-      mesh.visible = slot[chave] > 0.02;
+      malhas.forEach(mesh => { mesh.visible = slot[chave] > 0.02; });
 
       // Trocar `transparent` exige recompilar o shader, então só quando muda de
       // fato — fazer isso a cada frame derrubaria o desempenho.
@@ -1272,16 +1399,9 @@ function updateSlotFromFace(slot, f) {
   const tScaleVal = bS * CFG.glassesScale * window.FIT.scale;
   const tScale = new THREE.Vector3(tScaleVal, tScaleVal, tScaleVal);
 
-  // Quanto o rosto está de perfil: o eixo X vai de uma orelha à outra, então a
-  // componente Z dele é o seno do giro (0 de frente, 1 de lado).
-  // Cresce aos poucos e volta de uma vez, como um óculos que "aparece" ao virar.
-  const T = window.TEMPLE;
-  const alvo = T.enabled
-    ? clamp((Math.abs(clamp(f.xAxis.z, -1, 1)) - T.yawStart) / (1 - T.yawStart), 0, 1)
-    : 0;
-  slot.templeReveal = alvo > slot.templeReveal
-    ? slot.templeReveal + (alvo - slot.templeReveal) * T.rise
-    : alvo;
+  // Aqui era calculado slot.templeReveal, o quanto a máscara recuava conforme o
+  // yaw. Não existe mais: a máscara tem folga fixa e a aste de trás é apagada por
+  // profundidade real em applyTempleFade (ver updateOccluder).
 
   // O wrapper é centrado no meio da armação e as astes ocupam a metade de trás,
   // então o centro recua metade da profundidade do modelo para as LENTES caírem
