@@ -168,9 +168,34 @@ window.TEMPLE = {
   // Como é geometria e não limiar, não existe caso especial para acrescentar, e o
   // bug antigo de "cabeça toda abaixada some as duas astes" fica impossível por
   // construção: pitch puro mantém as duas na mesma profundidade.
-  hideStart: 0.08, // diferença a partir da qual a aste de trás começa a sumir
-  hideFull: 0.20,  // diferença em que ela já está 100% invisível (~11° de giro)
-  hideFade: 0.35,  // suavização por frame; alto porque o pedido é sumir rápido
+  hideStart: 0.04, // diferença a partir da qual a aste de trás começa a sumir
+  hideFull: 0.14,  // diferença em que ela já está 100% invisível
+  hideFade: 0.45,  // suavização por frame; alto porque o pedido é sumir rápido
+
+  // COMPRIMENTO DA ASTE, o segundo mecanismo (v4.30.0).
+  //
+  // Comparando os screenshots do provador com fotos de óculos de verdade nos
+  // MESMOS movimentos, o defeito não era o ângulo da aste: com a cabeça abaixada
+  // 40°, uma aste que aponta para trás realmente se projeta quase na vertical na
+  // tela, e nos óculos reais acontece igual. A diferença é que na vida real a
+  // CABEÇA TAPA a aste quase inteira, sobrando um toco junto da dobradiça — e no
+  // provador ela era desenhada inteira por cima da testa e do cabelo.
+  //
+  // Apagar por profundidade não resolvia isso e nunca resolveria: em inclinação
+  // pura nenhuma aste está atrás da outra, a diferença é ZERO, e continuaria zero
+  // por menor que fosse o hideStart. Faltava um mecanismo, não um limiar melhor.
+  //
+  // A regra: o comprimento à mostra vem de QUANTO O ROSTO ESTÁ VIRADO. De frente
+  // ou apenas inclinado, a aste fica um toco (minLen), que é o que os óculos reais
+  // mostram; conforme o rosto vira, ela cresce até o comprimento inteiro. Como o
+  // gatilho é o giro, a aste de perfil continua exatamente como está hoje.
+  //
+  // Encurtar é melhor que só apagar porque é o que a realidade faz: a silhueta da
+  // cabeça come a aste da ponta para a dobradiça, e não some com ela por inteiro.
+  showStart: 0.12, // giro (seno do yaw) em que a aste começa a crescer (~7°)
+  showFull: 0.45,  // giro em que ela já está inteira (~27°)
+  minLen: 0.15,    // fração do comprimento que sobra de frente / só inclinado
+  lenFade: 0.25,   // suavização do comprimento por frame
 };
 
 // Tamanho dos óculos no rosto, como multiplicador do tamanho calibrado.
@@ -664,12 +689,44 @@ function splitFrameMesh(mesh, frameMat, leftMat, rightMat, geoHalfW, modelMinZ, 
   });
 
   const temFrente = frameTris.length > 0;
+  const leftMesh = meshes[0];
+  const rightMesh = meshes[temFrente ? 2 : 1];
+
   return {
-    leftMesh: meshes[0],
+    leftMesh, rightMesh,
     frameMesh: temFrente ? meshes[1] : null,
-    rightMesh: meshes[temFrente ? 2 : 1],
+    // A aste encolhe EM DIREÇÃO À DOBRADIÇA, não para o meio dela, senão ela se
+    // descolaria da armação ao encurtar. Para isso a malha precisa de um pai que
+    // segure a transformação original e a deixe livre para escalar em Z: é o que
+    // envolverEmPivo faz. A dobradiça é o extremo FRONTAL da aste (maxZ da fatia).
+    leftPivot: envolverEmPivo(leftMesh, leftZ.maxZ),
+    rightPivot: envolverEmPivo(rightMesh, rightZ.maxZ),
     leftZ, rightZ,
   };
+}
+
+// Põe a malha dentro de um grupo que herda a transformação dela, deixando a malha
+// com transformação neutra. A partir daí escalar mesh.scale.z encurta a aste em
+// coordenadas do modelo, e compensar mesh.position.z mantém a dobradiça parada.
+//
+// Sem esse pai não dava para encurtar sem brigar com a transformação que a malha
+// já trazia do GLB (posição/rotação/escala do nó), que varia de modelo para modelo.
+function envolverEmPivo(ms, hingeZ) {
+  const pivo = new THREE.Group();
+  pivo.position.copy(ms.position);
+  pivo.quaternion.copy(ms.quaternion);
+  pivo.scale.copy(ms.scale);
+  pivo.frustumCulled = false;
+  pivo.renderOrder = 1;
+
+  ms.position.set(0, 0, 0);
+  ms.quaternion.identity();
+  ms.scale.set(1, 1, 1);
+  pivo.add(ms);
+
+  ms.userData.hingeZ = hingeZ;
+  ms.userData.pivo = pivo;
+  return pivo;
 }
 
 function buildFromModel(style, frameColor, lensColor, lensOpacity) {
@@ -789,8 +846,10 @@ function buildFromModel(style, frameColor, lensColor, lensOpacity) {
     if (!split) return; // malha sem aste: fica inteira, como estava
     const parent = m.parent;
     parent.remove(m);
-    parent.add(split.leftMesh);
-    parent.add(split.rightMesh);
+    // Entram os PIVÔS, não as malhas: é o pivô que carrega a transformação do nó
+    // do GLB, e a malha por dentro dele fica livre para encurtar em Z.
+    parent.add(split.leftPivot);
+    parent.add(split.rightPivot);
     frameMeshes.delete(m);
     // A fatia do meio pode sair vazia se a malha for só aste (caso do cateye).
     if (split.frameMesh) {
@@ -980,16 +1039,20 @@ window.diagAstes = function () {
       const i = m.geometry.getIndex();
       return s + (i ? i.count / 3 : 0);
     }, 0);
+    const todas = [...(g.userData.astesEsq || []), ...(g.userData.astesDir || [])];
     const d = {
       estilo, carregado: true,
       malhasEsq: (g.userData.astesEsq || []).length,
       malhasDir: (g.userData.astesDir || []).length,
       trisEsq: contaTris(g.userData.astesEsq),
       trisDir: contaTris(g.userData.astesDir),
+      // Sem pivô a aste até apaga, mas não encurta: encolheria para o meio dela e
+      // se descolaria da armação. Vale reportar, é o que o encurtamento exige.
+      pivo: todas.length > 0 && todas.every(m => !!m.userData.pivo),
     };
     d.ok = d.malhasEsq > 0 && d.malhasDir > 0;
     console.log(`[diag] ${estilo}: ${d.ok
-      ? `astes separadas - esq ${d.malhasEsq} malha(s)/${d.trisEsq} tri, dir ${d.malhasDir}/${d.trisDir} - apagamento por profundidade ativo`
+      ? `astes separadas - esq ${d.malhasEsq} malha(s)/${d.trisEsq} tri, dir ${d.malhasDir}/${d.trisDir} - apagamento ativo, pivo ${d.pivo ? 'OK' : 'FALTANDO'}`
       : 'NAO separou - aste de tras fica so por conta da mascara'}`);
     disposeObject3D(g);
     return d;
@@ -1320,9 +1383,14 @@ function updateOccluder(slot, f) {
 // roll e qualquer combinação deles entram na conta sem tratamento próprio.
 const _centroAste = new THREE.Vector3();
 
+// Mede pelo PIVÔ, não pela malha: a malha encolhe, e medir nela realimentaria a
+// conta (encurtar move o centro da aste -> muda a diferença de profundidade ->
+// muda o encurtamento -> a aste ficaria bombeando sozinha). O pivô nunca é tocado,
+// então esta medida depende só de onde a cabeça está.
 function centroNaCena(mesh) {
   if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
-  return mesh.geometry.boundingBox.getCenter(_centroAste).applyMatrix4(mesh.matrixWorld);
+  const ref = mesh.userData.pivo || mesh;
+  return mesh.geometry.boundingBox.getCenter(_centroAste).applyMatrix4(ref.matrixWorld);
 }
 
 // Profundidade média de um lado. É média porque um lado pode ter mais de uma
@@ -1359,14 +1427,40 @@ function applyTempleFade(slot, f) {
     : 0;
   const atrasEhEsquerda = dif < 0;
 
-  slot.templeDif = dif; // exposto para o painel de ajuste e para diagnóstico
+  // QUANTO DA ASTE APARECER. f.xAxis é o eixo lateral da cabeça, então xAxis.z é o
+  // seno do giro: 0 de frente, 1 de perfil. É a medida de quanto a aste saiu de
+  // trás da cabeça — de frente ou só inclinado ela continua na sombra da cabeça e
+  // os óculos reais mostram apenas um toco. Uma conta só cobre girar e inclinar.
+  const giro = Math.abs(f.xAxis.z);
+  const revelacao = T.enabled
+    ? clamp((giro - T.showStart) / Math.max(T.showFull - T.showStart, 1e-4), 0, 1)
+    : 1;
+  const compVisivel = T.minLen + (1 - T.minLen) * revelacao;
 
-  [[esq, matEsq, 'opEsq', atrasEhEsquerda], [dir, matDir, 'opDir', !atrasEhEsquerda]].forEach(
-    ([malhas, mat, chave, estaAtras]) => {
+  slot.templeDif = dif;   // exposto para o painel de ajuste e para diagnóstico
+  slot.templeComp = compVisivel;
+
+  [[esq, matEsq, 'opEsq', 'cpEsq', atrasEhEsquerda], [dir, matDir, 'opDir', 'cpDir', !atrasEhEsquerda]].forEach(
+    ([malhas, mat, chave, chaveComp, estaAtras]) => {
       const alvo = estaAtras ? 1 - forca : 1;
       const atual = slot[chave];
       const novo = atual + (alvo - atual) * T.hideFade;
       slot[chave] = Math.abs(novo - alvo) < 0.01 ? alvo : novo;
+
+      // A aste de trás encolhe ALÉM de apagar: mesmo que sobre um resto de
+      // opacidade, sobra pouco comprimento e o usuário não repara. Era o pedido —
+      // "se aparecer, que nem se note".
+      const alvoComp = estaAtras ? compVisivel * (1 - forca) : compVisivel;
+      const atualComp = slot[chaveComp] === undefined ? alvoComp : slot[chaveComp];
+      slot[chaveComp] = atualComp + (alvoComp - atualComp) * T.lenFade;
+
+      // Escala em Z encurta a aste; a translação devolve a dobradiça ao lugar, de
+      // modo que ela encolhe para dentro da armação em vez de se descolar dela.
+      const k = Math.max(slot[chaveComp], 0.001);
+      malhas.forEach(mesh => {
+        mesh.scale.z = k;
+        mesh.position.z = (mesh.userData.hingeZ || 0) * (1 - k);
+      });
 
       mat.opacity = slot[chave];
       mat.depthWrite = slot[chave] > 0.5;

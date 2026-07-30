@@ -1,145 +1,53 @@
-a aprtir de um certo angulo a aste oposta some   26/07 v4.24.0 (confirmado na camera)
-quando a cabeça está completamente abaixada ou levantada as 2 astes somem   26/07 v4.24.0 (confirmado na camera)
-
-a causa real era a mascara ficar OCA: o plano de corte deixava a malha aberta e
-pela abertura ela parava de ocluir. Agora a mascara e solida e recuada, e a
-frente dela para sempre um pouco atras da armacao (OCC.frontGap).
-
-
-a aste oposta NAO some quando o rosto vira   29/07 (RESOLVIDO, CONFIRMADO NA CAMERA 30/07)
-a aste mostrada fica muito curta em TODOS os angulos   29/07 (RESOLVIDO, CONFIRMADO NA CAMERA 30/07)
-
-   conferido na camera em 30/07 com os valores de fabrica (OCC.rx 0.45,
-   OCC.lados 4.0, TEMPLE.hideStart 0.08): nada precisou ser ajustado.
-
-   os dois eram o mesmo mecanismo brigando consigo mesmo. tres defeitos reais,
-   todos medidos e nao chutados:
-
-   1) o corte que separava a aste da armacao NUNCA rodou como estava escrito.
-      ele comparava coordenada crua da geometria (~0,01 de largura) com um
-      limiar tirado de Box3.setFromObject (que ja tem a escala do node do GLB
-      aplicada, centenas de vezes maior). a condicao nunca era verdadeira, e
-      TODO modelo caia no fallback por profundidade -> que cortava a 60% e
-      pegava so a METADE DE TRAS da aste. a metade da frente ficava junto com a
-      armacao e nunca era apagada: era isso que se via como "a aste nao some".
-
-   2) no cateye era impossivel funcionar. as astes dele estao espalhadas em
-      DUAS primitivas do arquivo, e o codigo cortava apenas a maior malha (que
-      no cateye e so a frente). agora percorre todas -> confere com
-      window.diagAstes(): cateye da 2 malhas por lado.
-
-   3) a mascara tinha MAIS QUE O DOBRO da largura de uma cabeca. OCC.rx era
-      1.10 em RAIO, ou seja 2,2 larguras de rosto; as astes correm em +-0,5,
-      logo ficavam enterradas dentro dela SEMPRE - a aste era curta em todos os
-      angulos por causa disso, e nao por tamanho do modelo (medindo os GLB, a
-      aste tem ~70% da profundidade, proporcao de oculos real). o rx tinha sido
-      inflado para compensar o elipsoide afinar nas laterais, e a compensacao
-      saiu pior que o defeito: dai ter nascido o recuo da mascara, que era
-      remendo do remendo (recuar descobria os DOIS lados, e ai precisava de um
-      segundo mecanismo para reesconder o de tras).
-
-   como ficou, um trabalho para cada mecanismo, sem gangorra:
-   - a aste e cortada por PROFUNDIDADE (e o que distingue aste de aro), com o
-     limiar no meio de um plato medido nos 3 GLB: qualquer valor entre 0,20 e
-     0,30 devolve as mesmas 126 astes nos tres. e topologia, nao calibragem.
-   - a mascara e mais ESTREITA que a linha das astes (rx 0,45) e tem lateral
-     reta (superelipse, OCC.lados), com forma de cabeca em vez de bola. a aste
-     de ca passa por fora e aparece inteira sozinha, em qualquer angulo.
-   - a aste de tras e apagada pela DIFERENCA DE PROFUNDIDADE REAL entre as duas
-     na cena. o sinal diz quem esta atras, o modulo diz o quanto. rosto reto ->
-     diferenca zero -> as duas aparecem. como e geometria e nao limiar por eixo,
-     cima, baixo, diagonal e combinacoes entram na mesma conta, sem caso
-     especial - e o bug antigo de "cabeca abaixada some as duas" fica
-     impossivel por construcao (pitch puro mantem as duas na mesma profundidade).
-
-   OBS: com pitch PURO (so cima/baixo, sem virar) as duas astes continuam
-   aparecendo, porque nenhuma das duas esta atras da outra - nesse caso nao
-   existe "aste oposta". o apagamento entra assim que houver qualquer giro,
-   inclusive combinado com o pitch.
-
-   FALTA CONFERIR NA CAMERA: o tamanho da mascara (OCC.rx = 0.45 e
-   OCC.lados = 4.0) foi escolhido por geometria, mas quanto a mascara tem de
-   cobrir de cabeca real so se ve olhando. se escapar ponta de aste atravessando
-   o rosto, suba OCC.rx aos poucos; se a aste de ca sumir, baixe.
-
-
-mais de uma pessoa poder utilizar o provador  --> FEITO em v4.23.0, FALTA TESTAR
-   ate 4 rostos ao mesmo tempo, cada um com seus oculos e sua mascara.
-   testar: duas pessoas juntas, se movendo e se cruzando, e conferir se os
-   oculos ficam grudados na pessoa certa (sem trocar de dono).
-
-
 -------------------------------------------------------------------
-AINDA EM ABERTO
+PROBLEMAS PARA RESOLVER
 -------------------------------------------------------------------
 
-1) MODO VITRINE (o que falta para 6 de agosto)
-   a tela fica atras do vidro, ninguem toca.
-   - tela cheia sem cursor .......... FEITO (iniciar-vitrine.ps1 abre em --kiosk,
-     e body.vitrine esconde cursor e sliders)
-   - voltar sozinho se travar ....... FEITO (retry infinito da camera, wake lock,
-     vigia do ultimoFrameEm a cada 5s, reinicio no webglcontextlost)
-   - onde roda ...................... DECIDIDO 30/07: PC LOCAL NA LOJA.
-     rodar .\iniciar-vitrine.ps1 (sem -Online). camera funciona em localhost sem
-     certificado e queda de internet nao derruba a vitrine.
-
-   FALTA SO: deixar o atalho pronto no PC da loja (atalho na area de trabalho /
-   pasta Inicializar apontando para iniciar-vitrine.ps1) e, na primeira abertura,
-   aceitar a permissao da camera marcando "lembrar".
-
-2) kiosk: a mascara (occluder) tapa a armacao
-   ficou de fora: para a vitrine escolhemos o provador da raiz, porque o kiosk
-   depende de toque (clicar na vitrine e nos botoes) e a tela fica atras do vidro.
-
-3) testar com crianca de verdade
-   a escala ja acompanha o tamanho do rosto, entao nao deve ficar grande demais,
-   mas as proporcoes de rosto infantil so dao para conferir na pratica.
+Ajuste ao vivo pelo console: ver AJUSTES AO VIVO.txt
+Lista antiga (ate 29/07): git show ae64806:"PROBLEMAS PARA RESOLVER.txt"
 
 
--------------------------------------------------------------------
-AJUSTE AO VIVO PELO CONSOLE (F12), sem recarregar nem republicar
--------------------------------------------------------------------
+1) ASTES: comprimento  (relatado pelo supervisor em 30/07)
+   v4.30.0 FEITO, FALTA VER NA CAMERA
 
-GESTOS
-  GEST.debug = true    mostra punho / polegar / dedos na tela
-  GEST.holdMs          tempo que o gesto fica parado para valer (800)
-  GEST.thumbTuck       quando o polegar conta como recolhido (0.95)
-  GEST.fingerCurl      quando o dedo conta como abaixado (1.05)
-  GEST.edgeMargin      borda do quadro onde a mao e ignorada (0.02)
+   sintoma nos 7 screenshots: com a cabeca abaixada as duas astes viravam dois
+   tracos retos subindo POR CIMA da testa e do cabelo, como antenas; com a
+   cabeca levantada desciam retas pela bochecha; e ao virar o rosto a aste
+   oposta ainda aparecia como um risco fino cruzando a sobrancelha.
 
-MASCARA DA CABECA
-  OCC.debug = true     pinta a mascara de vermelho
-  OCC.rx               raio horizontal (0.45) - tem de ficar MENOR que a linha
-                       das astes (0.5), senao a mascara engole a aste de ca.
-                       suba se escapar ponta de aste atravessando o rosto
-  OCC.lados            lateral reta da mascara (4.0) - 2 = bola, maior = mais
-                       forma de cabeca vista de cima. mexer aqui em vez de
-                       inflar o rx foi o que resolveu a aste curta
-  OCC.rz               raio de profundidade (1.00)
-  OCC.frontGap         folga entre a mascara e a armacao (0.15)
-                       aumente se a mascara comer a borda da lente
+   comparando com as fotos de oculos de verdade nos MESMOS movimentos, o
+   angulo da aste ja estava certo - com a cabeca inclinada 40 graus uma aste
+   que aponta para tras realmente se projeta quase na vertical na tela, e nos
+   oculos reais acontece igual. o que faltava e que na vida real A CABECA TAPA
+   a aste quase inteira, sobrando so um toco junto da dobradica.
 
-ASTES (aste de tras apagando ao virar o rosto)
-  window.diagAstes()   diz se cada modelo separou as astes, e quantas malhas e
-                       triangulos por lado. esperado: square/aviator 1 malha e
-                       126 tri por lado; cateye 2 malhas e 122 por lado.
-                       se disser "NAO separou", o apagamento esta desligado
-                       naquele modelo e quem esconde e so a mascara
-  TEMPLE.hideStart     diferenca de profundidade em que a aste de tras COMECA a
-                       sumir (0.08). menor = some mais cedo ao virar
-  TEMPLE.hideFull      diferenca em que ela ja esta 100% invisivel (0.20).
-                       aproxime de hideStart para sumir mais seco
-  TEMPLE.hideFade      suavizacao por frame (0.35). maior = mais imediato
-  TEMPLE.cutZ          onde a aste comeca no corte da malha (0.25). NAO mexer
-                       sem motivo: 0,20 a 0,30 e um plato medido nos 3 modelos
-  TEMPLE.enabled       false = desliga o apagamento, para comparar
+   por que "deixar o apagamento mais sensivel" NAO resolveria: o apagamento
+   mede a diferenca de profundidade entre as duas astes, e em inclinacao pura
+   nenhuma esta atras da outra - a diferenca e ZERO, e continuaria zero por
+   menor que fosse o hideStart. faltava um mecanismo, nao um limiar melhor.
 
-TREMOR
-  SMOOTH.deadZone      ignora tremor abaixo disso (0.02)
-                       sobe = mais firme parado / desce = menos "degraus" ao mexer
-  SMOOTH.pos           suavidade da posicao (0.22)
-  SMOOTH.rot           suavidade da rotacao (0.25)
+   como ficou: o COMPRIMENTO da aste virou um segundo mecanismo, governado por
+   quanto o rosto VIROU. de frente ou so inclinado a aste e um toco
+   (TEMPLE.minLen = 15%); conforme o rosto vira ela cresce ate ficar inteira.
+   como o gatilho e o giro, a aste de perfil - a que ja estava aprovada em
+   29/07 - nao muda em nada. o apagamento da aste de tras continua existindo,
+   ficou mais sensivel (hideStart 0.08 -> 0.04), e agora ela encurta alem de
+   apagar: se sobrar um resto de opacidade, sobra pouco comprimento junto.
 
-CALIBRAR A MASCARA SEM CAMERA
-  node serve-root.js  e abrir:
-  http://localhost:8000/dev/teste-mascara.html?rx=1.10&rz=1.00&pitch=-30&debug=1
+   FALTA CONFERIR NA CAMERA: repetir os mesmos movimentos dos screenshots.
+   - sobrou aste sobre a testa ao abaixar a cabeca -> baixe TEMPLE.minLen
+   - a aste sumiu demais com o rosto de frente    -> suba TEMPLE.minLen
+   - a aste de perfil ficou curta                 -> baixe TEMPLE.showFull
+   conferir tambem no console: window.diagAstes() tem de dizer "pivo OK" nos
+   tres modelos - sem pivo a aste apaga mas nao encurta.
+
+
+2) ATALHO NA VITRINE (ultimo passo para dar o projeto por encerrado)
+   criar o atalho no PC da loja apontando para iniciar-vitrine.ps1 (area de
+   trabalho ou pasta Inicializar), e na primeira abertura aceitar a permissao
+   da camera marcando "lembrar". decidido em 30/07: roda em PC LOCAL, nao pelo
+   site publicado.
+
+
+3) TESTAR COM CRIANCA DE VERDADE
+   a escala ja acompanha o tamanho do rosto, entao nao deve ficar grande
+   demais, mas proporcoes de rosto infantil so dao para conferir na pratica.

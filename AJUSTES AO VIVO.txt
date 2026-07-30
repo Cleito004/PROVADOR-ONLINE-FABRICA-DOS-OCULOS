@@ -1,0 +1,73 @@
+-------------------------------------------------------------------
+AJUSTE AO VIVO PELO CONSOLE (F12), sem recarregar nem republicar
+-------------------------------------------------------------------
+
+Manual de emergencia da vitrine: se algo sair do lugar na loja, da para
+corrigir aqui na hora, digitando no console do navegador (F12). Nao precisa
+mexer no codigo, nem publicar de novo. Os valores voltam ao normal ao
+recarregar a pagina - se um ajuste for definitivo, avisar para gravar no codigo.
+
+GESTOS
+  GEST.debug = true    mostra punho / polegar / dedos na tela
+  GEST.holdMs          tempo que o gesto fica parado para valer (800)
+  GEST.thumbTuck       quando o polegar conta como recolhido (0.95)
+  GEST.fingerCurl      quando o dedo conta como abaixado (1.05)
+  GEST.edgeMargin      borda do quadro onde a mao e ignorada (0.02)
+
+MASCARA DA CABECA
+  OCC.debug = true     pinta a mascara de vermelho
+  OCC.rx               raio horizontal (0.45) - tem de ficar MENOR que a linha
+                       das astes (0.5), senao a mascara engole a aste de ca.
+                       suba se escapar ponta de aste atravessando o rosto
+  OCC.lados            lateral reta da mascara (4.0) - 2 = bola, maior = mais
+                       forma de cabeca vista de cima. mexer aqui em vez de
+                       inflar o rx foi o que resolveu a aste curta
+  OCC.rz               raio de profundidade (1.00)
+  OCC.frontGap         folga entre a mascara e a armacao (0.15)
+                       aumente se a mascara comer a borda da lente
+
+ASTES - sao DOIS mecanismos, cada um com seu trabalho:
+  COMPRIMENTO (quanto de aste aparece) -> depende de quanto o rosto VIROU
+  APAGAMENTO (qual aste some)          -> depende de qual esta mais atras
+
+  window.diagAstes()   diz se cada modelo separou as astes, quantas malhas e
+                       triangulos por lado, e se o pivo existe. esperado:
+                       square/aviator 1 malha e 126 tri por lado; cateye 2
+                       malhas e 122 por lado; pivo OK nos tres.
+                       "NAO separou" = o apagamento esta desligado naquele
+                       modelo e quem esconde e so a mascara.
+                       "pivo FALTANDO" = a aste apaga mas nao encurta.
+
+  -- comprimento (v4.30.0) --
+  TEMPLE.minLen        quanto de aste sobra com o rosto de FRENTE ou apenas
+                       inclinado (0.15 = 15% do comprimento). e o toquinho que
+                       os oculos de verdade mostram nessa posicao.
+                       SUBA se a aste sumir demais de frente;
+                       BAIXE se ainda aparecer aste sobre a testa/cabelo ao
+                       abaixar ou levantar a cabeca.
+  TEMPLE.showStart     giro em que a aste comeca a crescer (0.12, ~7 graus)
+  TEMPLE.showFull      giro em que ela ja esta inteira (0.45, ~27 graus).
+                       BAIXE se a aste de perfil parecer curta demais;
+                       SUBA se ela crescer cedo demais e aparecer sobre o rosto.
+  TEMPLE.lenFade       suavizacao do comprimento por frame (0.25).
+                       maior = cresce/encolhe mais seco
+
+  -- apagamento --
+  TEMPLE.hideStart     diferenca de profundidade em que a aste de tras COMECA a
+                       sumir (0.04). menor = some mais cedo ao virar
+  TEMPLE.hideFull      diferenca em que ela ja esta 100% invisivel (0.14).
+                       aproxime de hideStart para sumir mais seco
+  TEMPLE.hideFade      suavizacao por frame (0.45). maior = mais imediato
+  TEMPLE.cutZ          onde a aste comeca no corte da malha (0.25). NAO mexer
+                       sem motivo: 0,20 a 0,30 e um plato medido nos 3 modelos
+  TEMPLE.enabled       false = desliga os dois, para comparar com o antigo
+
+TREMOR
+  SMOOTH.deadZone      ignora tremor abaixo disso (0.02)
+                       sobe = mais firme parado / desce = menos "degraus" ao mexer
+  SMOOTH.pos           suavidade da posicao (0.22)
+  SMOOTH.rot           suavidade da rotacao (0.25)
+
+CALIBRAR A MASCARA SEM CAMERA
+  node serve-root.js  e abrir:
+  http://localhost:8000/dev/teste-mascara.html?rx=1.10&rz=1.00&pitch=-30&debug=1
