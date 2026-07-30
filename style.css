@@ -1,4 +1,4 @@
-* {
+﻿* {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
@@ -117,7 +117,7 @@ main {
 }
 #face-info.hidden { opacity: 0; }
 
-/* ── Matriz de estilos 3x1 ──────────────────────────── */
+/* â”€â”€ Matriz de estilos 3x1 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 #style-matrix {
   position: absolute;
   right: 20px;
@@ -161,9 +161,9 @@ main {
 }
 .style-item.active .style-name { color: var(--text); }
 
-/* ── Guia dos gestos na tela ──────────────────────────────────────────────
-   Fica no ALTO porque o rosto ocupa o meio e a faixa RGB ocupa a base; e é
-   lido de fora, atras do vidro, por alguem de passagem — dai o tamanho grande,
+/* â”€â”€ Guia dos gestos na tela â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+   Fica no ALTO porque o rosto ocupa o meio e a faixa RGB ocupa a base; e Ã©
+   lido de fora, atras do vidro, por alguem de passagem â€” dai o tamanho grande,
    o fundo escuro e a borda luminosa, que sobrevivem ao reflexo da rua.
    Em tela EM PE ha largura sobrando de menos, entao o texto quebra em duas
    linhas em vez de encolher (ver a media query no fim do arquivo). */
@@ -211,7 +211,7 @@ main {
 #guia-titulo { font-size: 26px; font-weight: 700; color: var(--text); }
 #guia-sub { font-size: 17px; color: var(--text-dim); }
 
-/* ── Faixa de cores RGB ──────────────────────────── */
+/* â”€â”€ Faixa de cores RGB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 #color-strip-container {
   position: absolute;
   bottom: 30px;
@@ -263,60 +263,8 @@ main {
   pointer-events: none;
 }
 
-/* ── Sliders de ajuste ──────────────────────────── */
-#adjustment-panel {
-  position: absolute;
-  left: 16px;
-  bottom: 100px;
-  background: rgba(0,0,0,0.5);
-  backdrop-filter: blur(8px);
-  padding: 12px 16px;
-  border-radius: 10px;
-  z-index: 8;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 160px;
-}
 
-.adj-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.adj-row label {
-  font-size: 11px;
-  color: var(--text-dim);
-  min-width: 55px;
-  text-align: right;
-}
-.adj-value {
-  font-size: 11px;
-  color: var(--text);
-  min-width: 35px;
-  text-align: left;
-  font-variant-numeric: tabular-nums;
-}
-.adj-row input[type="range"] {
-  -webkit-appearance: none;
-  appearance: none;
-  flex: 1;
-  height: 3px;
-  background: var(--surface2);
-  border-radius: 2px;
-  outline: none;
-}
-.adj-row input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--primary);
-  cursor: pointer;
-  border: none;
-}
-
-/* ── Hand gesture status ──────────────────────────── */
+/* â”€â”€ Hand gesture status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 #hand-gesture-status {
   position: absolute;
   top: 16px;
@@ -335,20 +283,21 @@ main {
 }
 #hand-gesture-status.show { opacity: 1; }
 
-/* ── Modo vitrine (?vitrine=1) ───────────────────── */
-/* Tela atrás do vidro: ninguém toca, ninguém vê o cursor, e os sliders de
-   ajuste só ocupariam espaço porque não há como usá-los. */
+/* â”€â”€ Modo vitrine (?vitrine=1) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* Tela atrÃ¡s do vidro: ninguÃ©m toca, ninguÃ©m vÃª o cursor, e os sliders de
+   ajuste sÃ³ ocupariam espaÃ§o porque nÃ£o hÃ¡ como usÃ¡-los. */
 body.vitrine,
 body.vitrine * {
   cursor: none !important;
 }
-body.vitrine #adjustment-panel,
+/* O #adjustment-panel era escondido aqui tambem; desde o v4.33.0 ele nao existe
+   mais em lugar nenhum, entao sobra so o #face-info. */
 body.vitrine #face-info {
   display: none;
 }
 
-/* ── Progresso do gesto (dwell) ──────────────────── */
-/* Fica logo acima da faixa de cores para não disputar espaço com ela. */
+/* â”€â”€ Progresso do gesto (dwell) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* Fica logo acima da faixa de cores para nÃ£o disputar espaÃ§o com ela. */
 #gesture-dwell {
   position: absolute;
   bottom: 84px;
@@ -476,15 +425,15 @@ body.vitrine #face-info {
   transform: translateX(-50%) translateY(0);
 }
 
-/* ── Tela EM PÉ (a vitrine) ───────────────────────────────────────────────
-   A vitrine é um monitor de pé: os lados são mais compridos que a base. O
-   recorte da imagem é feito no render (ajustarEnquadramento em script.js);
-   aqui fica só o que é layout, porque numa tela estreita e alta sobra altura
-   e falta LARGURA — o oposto do que estes elementos assumiam.
-   O corte lateral também significa que há menos largura útil de imagem, então
-   nada aqui pode ocupar as bordas: elas ficaram fora do quadro da câmera. */
+/* â”€â”€ Tela EM PÃ‰ (a vitrine) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+   A vitrine Ã© um monitor de pÃ©: os lados sÃ£o mais compridos que a base. O
+   recorte da imagem Ã© feito no render (ajustarEnquadramento em script.js);
+   aqui fica sÃ³ o que Ã© layout, porque numa tela estreita e alta sobra altura
+   e falta LARGURA â€” o oposto do que estes elementos assumiam.
+   O corte lateral tambÃ©m significa que hÃ¡ menos largura Ãºtil de imagem, entÃ£o
+   nada aqui pode ocupar as bordas: elas ficaram fora do quadro da cÃ¢mera. */
 @media (orientation: portrait) {
-  /* A matriz de estilos vivia colada na lateral direita, que é justo a área
+  /* A matriz de estilos vivia colada na lateral direita, que Ã© justo a Ã¡rea
      mais disputada numa tela estreita. Vai para o alto, deitada em linha. */
   #style-matrix {
     right: auto;
@@ -496,13 +445,13 @@ body.vitrine #face-info {
     gap: 14px;
   }
 
-  /* 35% da largura numa tela em pé vira uma faixa curta demais para arrastar
-     a mão com precisão: a criança teria de mover a mão milímetros por cor. */
+  /* 35% da largura numa tela em pÃ© vira uma faixa curta demais para arrastar
+     a mÃ£o com precisÃ£o: a crianÃ§a teria de mover a mÃ£o milÃ­metros por cor. */
   #color-strip-container { width: 78%; bottom: 5%; }
   #color-strip { height: 52px; border-radius: 26px; }
 
-  /* Sobra altura, então a dica pode ser maior e quebrar em duas linhas em vez
-     de encolher a fonte — é lida de longe, atrás do vidro. */
+  /* Sobra altura, entÃ£o a dica pode ser maior e quebrar em duas linhas em vez
+     de encolher a fonte â€” Ã© lida de longe, atrÃ¡s do vidro. */
   #guia-dica {
     top: 3%;
     max-width: 92%;
@@ -514,5 +463,4 @@ body.vitrine #face-info {
   #guia-emoji { font-size: 46px; }
 
   #gesture-dwell { bottom: calc(5% + 66px); }
-  #adjustment-panel { bottom: calc(5% + 80px); }
 }

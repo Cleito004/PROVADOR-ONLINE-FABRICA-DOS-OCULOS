@@ -59,21 +59,17 @@ test.describe('Provador Virtual - Frontend', () => {
     expect(jsErrors).toEqual([])
   })
 
-  test('sliders de ajuste existem e funcionam', async ({ page }) => {
+  // Os sliders de Distancia e Altura sairam no v4.33.0: o produto e uma tela
+  // atras do vidro, onde ninguem alcanca um controle. Este teste virou o
+  // contrario do que era - garante que eles nao VOLTEM sem querer, junto com
+  // qualquer outro controle de mouse na tela.
+  test('nao ha sliders de ajuste na tela', async ({ page }) => {
     await page.goto(BASE, { waitUntil: 'domcontentloaded' })
 
-    const distanceSlider = page.locator('#adj-distance')
-    const heightSlider = page.locator('#adj-height')
-
-    await expect(distanceSlider).toBeAttached()
-    await expect(heightSlider).toBeAttached()
-
-    // 0 = usar o recuo derivado da geometria do modelo; o slider é ajuste fino.
-    const distValue = await distanceSlider.inputValue()
-    expect(Number(distValue)).toBe(0)
-
-    const heightValue = await heightSlider.inputValue()
-    expect(Number(heightValue)).toBe(-10)
+    await expect(page.locator('#adjustment-panel')).toHaveCount(0)
+    await expect(page.locator('#adj-distance')).toHaveCount(0)
+    await expect(page.locator('#adj-height')).toHaveCount(0)
+    await expect(page.locator('input[type="range"]')).toHaveCount(0)
   })
 
   test('faixa de cores RGB existe', async ({ page }) => {

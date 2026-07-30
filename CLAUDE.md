@@ -68,7 +68,7 @@ The same file also watches the console for shader errors, because the cut is a *
 
 `tests/vitrine.spec.mjs` (v4.32.0) covers the shop-window screen: that the canvas buffer and its CSS box always have the **same** aspect (the proof that nothing is stretched), that a portrait viewport crops the sides and an ultra-wide one crops top/bottom, that the RGB strip's red end is still reachable **inside** the cropped view, and that the on-screen guide resets once no face has been seen. It also needs the fake camera. Note it deliberately does **not** assert that a 1280×720 viewport crops anything: Chrome's fake device emits 16:9, so on a 16:9 viewport nothing needs cropping — asserting a crop there would test the test rig, not the app.
 
-The other tests assert the exact DOM contract of `index.html` (`#style-matrix` has exactly 3 items in order `square, aviator, cateye`; `#adj-distance` defaults to `-150`; `#adj-height` to `-10`). Changing those defaults or the style list breaks tests — update `tests/site.spec.mjs` in the same commit. Console errors mentioning camera/MediaPipe are deliberately filtered out, since CI has no webcam.
+The other tests assert the exact DOM contract of `index.html` (`#style-matrix` has exactly 3 items in order `square, aviator, cateye`) and that there is **no** `input[type="range"]` anywhere — the Distance/Height sliders were removed in v4.33.0 and that assertion exists so they, or any other mouse control, do not come back by accident. Changing the style list breaks tests — update `tests/site.spec.mjs` in the same commit. Console errors mentioning camera/MediaPipe are deliberately filtered out, since CI has no webcam.
 
 ## How the root app (`script.js`) works
 

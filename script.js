@@ -297,13 +297,19 @@ function releaseColorStrip() {
   if (strip) strip.classList.remove('active');
 }
 
-let adjHeight = -10;
+// Correções finas do encaixe, todas constantes desde o v4.33.0. Altura e
+// Distância ainda eram sliders na tela; sumiram porque o produto é uma tela
+// atrás do vidro, onde ninguém alcança um controle — no modo vitrine já eram
+// escondidos por CSS, então na prática só existiam para quem desenvolvia.
+// Os valores são exatamente aqueles em que os sliders estavam, e portanto o
+// encaixe no rosto não mudou. Para afinar sem republicar: window.FIT.scale.
+const adjHeight = -10;
 const adjRotation = 0;
 const adjLateral = 0;
-// Ajuste fino em torno do recuo correto, que agora vem da geometria do modelo.
-// Era -150 (o recuo inteiro, fixo em pixels), o que desalinhava os óculos ao
+// Ajuste fino em torno do recuo correto, que vem da geometria do modelo. Era
+// -150 (o recuo inteiro, fixo em pixels), o que desalinhava os óculos ao
 // inclinar a cabeça — ver o cálculo de zOffset em runPrediction.
-let adjDistance = 0;
+const adjDistance = 0;
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 function qDelta(a, b) { return 2 * Math.acos(clamp(Math.abs(a.dot(b)), 0, 1)); }
@@ -2102,18 +2108,11 @@ const scanMessage = document.getElementById('scan-message');
 const scanProgressBar = document.getElementById('scan-progress-bar');
 const scanStatus = document.getElementById('scan-status');
 
-document.querySelectorAll('#adjustment-panel input[type="range"]').forEach(slider => {
-  slider.addEventListener('input', () => {
-    const d = document.getElementById('adj-distance');
-    const dv = document.getElementById('adj-distance-value');
-    if (d) adjDistance = parseFloat(d.value);
-    if (dv) dv.textContent = d ? d.value : '-150';
-    const h = document.getElementById('adj-height');
-    const hv = document.getElementById('adj-height-value');
-    if (h) adjHeight = parseFloat(h.value);
-    if (hv) hv.textContent = h ? h.value : '0';
-  });
-});
+// Aqui ficava o listener dos sliders de Distância e Altura. Eles saíram no
+// v4.33.0: o produto é uma tela atrás do vidro, onde ninguém alcança um slider —
+// no modo vitrine eles já eram escondidos por CSS. Os valores em que estavam
+// (0 e -10) viraram constantes, então o encaixe na cara continua idêntico.
+// Para afinar o encaixe sem republicar, use window.FIT.scale pelo console.
 
 function showError(title, msg) {
   loadingOverlay.classList.add('hidden');
