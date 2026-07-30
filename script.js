@@ -232,13 +232,46 @@ window.ENQ = { fracX: 1, fracY: 1, visW: 0, visH: 0 };
 // MAIORES = mais colado no rosto, porém tremendo mais. Se ainda tremer, baixe
 // SMOOTH.pos e SMOOTH.rot; se parecer "arrastando", suba os dois.
 window.SMOOTH = {
+  // PISOS — valem com a pessoa PARADA e não mudaram no v4.34.0. É o que segura o
+  // tremor, e foi conferido na câmera; mexer aqui é que traz o tremor de volta.
   pos: 0.22,       // posição: piso do fator por frame
   scale: 0.15,     // escala: mais lenta ainda, o tamanho quase não muda
-  posMax: 0.65,    // teto quando a pessoa se move rápido
-  posBoost: 0.02,  // quanto o movimento acelera a resposta
   rot: 0.25,       // rotação: piso
-  rotMax: 0.70,    // rotação: teto
-  rotBoost: 0.9,
+
+  // TETOS — valem no movimento RÁPIDO. Eram o defeito relatado em 30/07: "quando
+  // move o rosto muito rápido ele não acompanha e chega atrasado".
+  //
+  // Com fator `a` por frame e velocidade `v`, o atraso que sobra em regime é
+  // v*(1-a)/a. Com o teto antigo de 0.65 isso dá 0.54*v — num movimento rápido
+  // de ~30 px por frame, uns 16 px de atraso permanente, que é exatamente o que
+  // se via. Em 0.95 cai para 0.05*v, ~1,5 px. Não vai a 1.0 porque em movimento
+  // rápido a imagem borra e os pontos do MediaPipe ficam ruidosos: 1.0 copiaria
+  // esse ruído inteiro para os óculos.
+  //
+  // Subir o TETO não afeta quem está parado — lá quem manda é o piso.
+  posMax: 0.95,    // era 0.65
+  rotMax: 0.95,    // era 0.70
+
+  // A escala tem teto PRÓPRIO, e baixo de propósito. Ela seguia o mesmo teto da
+  // posição, e levá-la a 0.95 faria o tamanho dos óculos pulsar a cada erro de
+  // medida do rosto — o tamanho de uma pessoa não muda depressa, só a posição.
+  scaleMax: 0.60,
+
+  // ACELERADORES: quanto de movimento é preciso para sair do piso e chegar ao
+  // teto. O posBoost era 0.02 medido em PIXELS DA CENA, e por isso praticamente
+  // não ligava: para tirar a posição do piso ao teto exigia ~21 px por frame.
+  // Pior, por ser em pixels a resposta dependia da DISTÂNCIA — quem estava mais
+  // longe move menos pixels e recebia menos aceleração, ficando mais lento justo
+  // onde o rosto é menor. Agora o movimento é medido em LARGURAS DE ROSTO, então
+  // o número é adimensional e vale igual perto e longe.
+  //   ~0.03 largura/frame (movimento normal) -> posição já bem solta
+  //   ~0.20 largura/frame (movimento rápido) -> no teto
+  posBoost: 4.0,   // era 0.02, e em outra unidade
+  scaleBoost: 1.2, // a escala sobe bem mais devagar, de propósito
+  // A rotação já era adimensional (qDelta devolve radianos), então aqui só
+  // faltava ganho: com 0.9 um giro rápido de ~0.25 rad/frame chegava a 0.47, bem
+  // abaixo do teto. Com 2.5 chega perto de 0.9.
+  rotBoost: 2.5,   // era 0.9
   // Zona morta: variação menor que isto é considerada ruído do rastreamento e
   // simplesmente ignorada, o que trava os óculos no rosto com a pessoa parada.
   // Filtrar mais (baixar pos/rot) resolveria o tremor, mas ao custo de atraso
@@ -1832,12 +1865,17 @@ function updateSlotFromFace(slot, f) {
   // tremor com a pessoa parada; o termo de movimento devolve resposta rápida
   // quando ela realmente se mexe.
   const m = slot.motion;
-  const mov = tPos.distanceTo(m.prev);
+  // Movimento em LARGURAS DE ROSTO por frame, não em pixels: assim a resposta é
+  // a mesma perto e longe da câmera. Em pixels, quem estava mais longe movia
+  // menos e era acelerado menos, ficando mais lento onde o rosto já era menor.
+  const mov = tPos.distanceTo(m.prev) / Math.max(f.fW, 1);
   m.prev.copy(tPos);
 
   const S = window.SMOOTH;
   const aP = clamp(S.pos + mov * S.posBoost, S.pos, S.posMax);
-  const aS = clamp(S.scale + mov * S.posBoost, S.scale, S.posMax);
+  // Escala com acelerador e teto próprios: o tamanho de uma pessoa não muda
+  // depressa, e deixá-lo tão solto quanto a posição faria os óculos pulsar.
+  const aS = clamp(S.scale + mov * S.scaleBoost, S.scale, S.scaleMax);
 
   if (!m.readyPos) {
     m.pos.copy(tPos);
