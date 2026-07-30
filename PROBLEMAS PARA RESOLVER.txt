@@ -6,8 +6,11 @@ pela abertura ela parava de ocluir. Agora a mascara e solida e recuada, e a
 frente dela para sempre um pouco atras da armacao (OCC.frontGap).
 
 
-a aste oposta NAO some quando o rosto vira   29/07 (FEITO, FALTA VER NA CAMERA)
-a aste mostrada fica muito curta em TODOS os angulos   29/07 (FEITO, FALTA VER NA CAMERA)
+a aste oposta NAO some quando o rosto vira   29/07 (RESOLVIDO, CONFIRMADO NA CAMERA 30/07)
+a aste mostrada fica muito curta em TODOS os angulos   29/07 (RESOLVIDO, CONFIRMADO NA CAMERA 30/07)
+
+   conferido na camera em 30/07 com os valores de fabrica (OCC.rx 0.45,
+   OCC.lados 4.0, TEMPLE.hideStart 0.08): nada precisou ser ajustado.
 
    os dois eram o mesmo mecanismo brigando consigo mesmo. tres defeitos reais,
    todos medidos e nao chutados:
@@ -71,11 +74,18 @@ AINDA EM ABERTO
 -------------------------------------------------------------------
 
 1) MODO VITRINE (o que falta para 6 de agosto)
-   a tela fica atras do vidro, ninguem toca. falta:
-   - abrir em tela cheia sozinho, sem cursor do mouse aparecendo
-   - se voltar a funcionar sozinho se a camera falhar ou a pagina travar
-   - decidir onde roda: PC local na loja (recomendado, camera funciona em
-     localhost sem certificado e nao depende de internet) ou pelo site publicado
+   a tela fica atras do vidro, ninguem toca.
+   - tela cheia sem cursor .......... FEITO (iniciar-vitrine.ps1 abre em --kiosk,
+     e body.vitrine esconde cursor e sliders)
+   - voltar sozinho se travar ....... FEITO (retry infinito da camera, wake lock,
+     vigia do ultimoFrameEm a cada 5s, reinicio no webglcontextlost)
+   - onde roda ...................... DECIDIDO 30/07: PC LOCAL NA LOJA.
+     rodar .\iniciar-vitrine.ps1 (sem -Online). camera funciona em localhost sem
+     certificado e queda de internet nao derruba a vitrine.
+
+   FALTA SO: deixar o atalho pronto no PC da loja (atalho na area de trabalho /
+   pasta Inicializar apontando para iniciar-vitrine.ps1) e, na primeira abertura,
+   aceitar a permissao da camera marcando "lembrar".
 
 2) kiosk: a mascara (occluder) tapa a armacao
    ficou de fora: para a vitrine escolhemos o provador da raiz, porque o kiosk
