@@ -12,7 +12,7 @@
     <div id="loading-overlay" class="hidden">
       <div class="loader">
         <div class="spinner"></div>
-        <p id="loading-text">Carregando modelo de detecção facial...</p>
+        <p id="loading-text">🤖 Acordando o provador...</p>
       </div>
     </div>
 
@@ -80,6 +80,16 @@
             <label>Altura</label>
             <input type="range" id="adj-height" min="-100" max="100" value="-10" step="5">
             <span id="adj-height-value" class="adj-value">-10</span>
+          </div>
+        </div>
+
+        <!-- Guia dos gestos na propria tela: aparece conforme a pessoa age e
+             recomeca do zero a cada pessoa nova (ver guiaTick em script.js) -->
+        <div id="guia-dica" class="hidden">
+          <span id="guia-emoji"></span>
+          <div class="guia-texto">
+            <strong id="guia-titulo"></strong>
+            <span id="guia-sub"></span>
           </div>
         </div>
 

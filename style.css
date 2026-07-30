@@ -161,6 +161,56 @@ main {
 }
 .style-item.active .style-name { color: var(--text); }
 
+/* ── Guia dos gestos na tela ──────────────────────────────────────────────
+   Fica no ALTO porque o rosto ocupa o meio e a faixa RGB ocupa a base; e é
+   lido de fora, atras do vidro, por alguem de passagem — dai o tamanho grande,
+   o fundo escuro e a borda luminosa, que sobrevivem ao reflexo da rua.
+   Em tela EM PE ha largura sobrando de menos, entao o texto quebra em duas
+   linhas em vez de encolher (ver a media query no fim do arquivo). */
+#guia-dica {
+  position: absolute;
+  top: 4%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  max-width: 86%;
+  padding: 16px 28px;
+  border-radius: 999px;
+  background: rgba(15, 15, 26, 0.82);
+  border: 2px solid var(--primary);
+  box-shadow: 0 0 28px rgba(124, 92, 255, 0.45);
+  backdrop-filter: blur(6px);
+  z-index: 12;
+  opacity: 1;
+  transition: opacity 0.45s ease, transform 0.45s ease;
+  /* Nasce descendo de cima: chama o olho de quem so passou na frente. */
+  animation: guia-entra 0.5s ease;
+}
+#guia-dica.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(-12px);
+}
+@keyframes guia-entra {
+  from { opacity: 0; transform: translateX(-50%) translateY(-18px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+#guia-emoji {
+  font-size: 40px;
+  line-height: 1;
+  /* Balanca de leve: sinaliza "faca isto com a mao" sem precisar de texto. */
+  animation: guia-acena 1.6s ease-in-out infinite;
+}
+@keyframes guia-acena {
+  0%, 100% { transform: rotate(-8deg); }
+  50%      { transform: rotate(12deg); }
+}
+.guia-texto { display: flex; flex-direction: column; line-height: 1.25; }
+#guia-titulo { font-size: 26px; font-weight: 700; color: var(--text); }
+#guia-sub { font-size: 17px; color: var(--text-dim); }
+
 /* ── Faixa de cores RGB ──────────────────────────── */
 #color-strip-container {
   position: absolute;
@@ -424,4 +474,45 @@ body.vitrine #face-info {
 #toast.show {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+
+/* ── Tela EM PÉ (a vitrine) ───────────────────────────────────────────────
+   A vitrine é um monitor de pé: os lados são mais compridos que a base. O
+   recorte da imagem é feito no render (ajustarEnquadramento em script.js);
+   aqui fica só o que é layout, porque numa tela estreita e alta sobra altura
+   e falta LARGURA — o oposto do que estes elementos assumiam.
+   O corte lateral também significa que há menos largura útil de imagem, então
+   nada aqui pode ocupar as bordas: elas ficaram fora do quadro da câmera. */
+@media (orientation: portrait) {
+  /* A matriz de estilos vivia colada na lateral direita, que é justo a área
+     mais disputada numa tela estreita. Vai para o alto, deitada em linha. */
+  #style-matrix {
+    right: auto;
+    left: 50%;
+    top: auto;
+    bottom: 15%;
+    transform: translateX(-50%);
+    flex-direction: row;
+    gap: 14px;
+  }
+
+  /* 35% da largura numa tela em pé vira uma faixa curta demais para arrastar
+     a mão com precisão: a criança teria de mover a mão milímetros por cor. */
+  #color-strip-container { width: 78%; bottom: 5%; }
+  #color-strip { height: 52px; border-radius: 26px; }
+
+  /* Sobra altura, então a dica pode ser maior e quebrar em duas linhas em vez
+     de encolher a fonte — é lida de longe, atrás do vidro. */
+  #guia-dica {
+    top: 3%;
+    max-width: 92%;
+    border-radius: 28px;
+    padding: 18px 24px;
+  }
+  #guia-titulo { font-size: 30px; }
+  #guia-sub { font-size: 19px; }
+  #guia-emoji { font-size: 46px; }
+
+  #gesture-dwell { bottom: calc(5% + 66px); }
+  #adjustment-panel { bottom: calc(5% + 80px); }
 }

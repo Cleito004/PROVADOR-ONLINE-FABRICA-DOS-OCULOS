@@ -6,6 +6,37 @@ Ajuste ao vivo pelo console: ver AJUSTES AO VIVO.txt
 Lista antiga (ate 29/07): git show ae64806:"PROBLEMAS PARA RESOLVER.txt"
 
 
+0) VITRINE EM PE + GUIA NA TELA + LEGENDAS  (30/07, pedido do usuario)
+   v4.32.0 FEITO, FALTA VER NA VITRINE DE VERDADE
+
+   a) TELA EM PE - era DEFEITO, nao so "adaptar". o canvas era criado no tamanho
+      do VIDEO (deitado) e o CSS esticava para 100%x100% sem preservar proporcao.
+      numa tela 9:16 isso nao dava barra preta: dava DISTORCAO, rosto e oculos
+      altos e finos. agora a imagem e CORTADA nas laterais para caber, e o
+      sistema de coordenadas da cena continua em pixels de video - nenhuma conta
+      de posicionamento precisou mudar.
+      efeito colateral tratado junto: a faixa RGB passou a ser medida na TELA.
+      antes ela pedia a mao num ponto que, com as laterais cortadas, fica FORA
+      da tela - a pessoa teria de mover a mao para onde nao se ve.
+      CONFERIR: ligar a vitrine no monitor em pe e ver se a imagem preenche tudo
+      sem esticar, e se a cor da armacao chega ao vermelho sem tirar a mao da tela.
+
+   b) GUIA NA TELA - o guia so existia em papel (onboarding_new3.pdf), e numa
+      vitrine ninguem le cartaz. agora aparece dentro do provador, no alto, e
+      cada dica so sai quando a pessoa FAZ aquele gesto. recomeca do zero quando
+      a tela fica vazia (GUIA.reiniciarMs = 4s), porque as criancas se trocam.
+      ajuste ao vivo: window.GUIA (enabled, reiniciarMs, fimMs) e window.guiaEstado().
+      CONFERIR: se as dicas atrapalham a imagem, GUIA.enabled = false desliga.
+
+   c) LEGENDAS DE CARREGAMENTO - as tecnicas ("Compilando WASM...") viraram
+      frases do provador. cada uma continua dizendo o que esta acontecendo.
+
+   NAO FEITO de proposito: o gesto de PASSAR A MAO para trocar de modelo. ele
+   existiu (commit e6584ba, 16/07) e foi removido porque briga com a contagem de
+   dedos - crianca acenando vira troca de modelo sem querer. decidido em 30/07
+   deixar como esta.
+
+
 1) ASTES: ponta retorcida virando um risco para baixo  (30/07, supervisor)
    v4.31.0 FEITO, FALTA VER NA CAMERA
 

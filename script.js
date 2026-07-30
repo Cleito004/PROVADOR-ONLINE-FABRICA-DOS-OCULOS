@@ -214,6 +214,19 @@ window.TEMPLE = {
 // republicar: mexa aqui, veja na tela, e me passe o valor que ficar bom.
 window.FIT = { scale: 1.0 };
 
+// ENQUADRAMENTO (v4.32.0). A vitrine é uma tela EM PÉ e a webcam entrega imagem
+// DEITADA. O canvas era criado no tamanho do VÍDEO e o CSS o esticava para
+// 100%x100% do container sem preservar proporção — numa tela 9:16 isso não dava
+// barra preta, dava DISTORÇÃO: o rosto (e os óculos) saíam altos e finos.
+//
+// Aqui fica quanto do vídeo sobrou VISÍVEL depois do corte que faz a imagem
+// caber na proporção da tela. 1 = nada cortado (tela deitada igual à webcam).
+// Numa tela 9:16 com webcam 4:3 sobra ~42% da largura.
+//
+// Quem consulta isto é a faixa RGB (ver xNaTela): sem essa conta a ponta do
+// arco-íris cairia FORA da tela, e a pessoa teria de pôr a mão onde não se vê.
+window.ENQ = { fracX: 1, fracY: 1, visW: 0, visH: 0 };
+
 // Suavização do rastreamento. Ajustável ao vivo pelo console (window.SMOOTH).
 // Valores MENORES = mais suave e mais tremor filtrado, porém com leve atraso;
 // MAIORES = mais colado no rosto, porém tremendo mais. Se ainda tremer, baixe
@@ -514,6 +527,132 @@ function showGestureStatus(msg) {
   el.textContent = msg;
   el.classList.add('show');
 }
+
+// ── GUIA DOS GESTOS NA PRÓPRIA TELA (v4.32.0) ───────────────────────────────
+//
+// O guia existia só em papel (onboarding.html -> onboarding_new3.pdf). Numa
+// vitrine isso não funciona: a criança chega andando, olha a tela por alguns
+// segundos e vai embora — ninguém vai ler um cartaz para depois voltar. Então o
+// guia passa a viver DENTRO do provador.
+//
+// Ele não é um tutorial de passar slide: cada dica sai da tela quando a pessoa
+// EXECUTA aquele gesto de verdade. Quem já sabe nunca vê a dica seguinte parada
+// esperando, e quem não sabe fica com a instrução na frente até conseguir.
+//
+// Os passos são marcados como feitos INDEPENDENTEMENTE um do outro, e a tela
+// mostra o primeiro que ainda falta. Assim, se a criança começar pela cor da
+// lente, esse passo já conta como aprendido em vez de ficar cobrando dela a
+// ordem que o guia imaginou.
+//
+// Recomeça do zero quando a tela fica vazia — o gatilho é ausência de rosto, e
+// não um "já mostrei uma vez". Na vitrine as crianças se trocam o tempo todo e
+// cada uma precisa ver desde o começo.
+window.GUIA = {
+  enabled: true,
+  reiniciarMs: 4000, // sem nenhum rosto por este tempo -> volta ao primeiro passo
+  fimMs: 5000,       // quanto tempo a última dica (informativa) fica na tela
+};
+
+// O texto sai do onboarding.html, encurtado para ser lido de passagem: título
+// = o que fazer com o corpo, subtítulo = o que aquilo muda nos óculos.
+const PASSOS_GUIA = [
+  { id: 'modelo', emoji: '👋', txt: 'Mostre 1, 2 ou 3 dedos', sub: 'com a mão direita — troca o modelo' },
+  { id: 'lente',  emoji: '🕶️', txt: 'Agora a outra mão',      sub: '1, 2 ou 3 dedos — muda a lente' },
+  { id: 'cor',    emoji: '✊', txt: 'Feche a mão e arraste',   sub: 'para os lados — pinta a armação' },
+  { id: 'fim',    emoji: '🖐️', txt: 'Mão aberta trava',        sub: 'pronto, divirta-se!' },
+];
+
+const guia = { feitos: new Set(), desde: 0, semRostoDesde: 0, concluido: false };
+
+function guiaReiniciar() {
+  guia.feitos.clear();
+  guia.desde = 0;
+  guia.semRostoDesde = 0;
+  guia.concluido = false;
+}
+
+// Chamado quando a pessoa realmente executou a ação — não quando ela só tentou.
+function guiaFeito(id) {
+  if (!window.GUIA.enabled || guia.concluido || guia.feitos.has(id)) return;
+  guia.feitos.add(id);
+  guia.desde = performance.now(); // o próximo passo começa a contar agora
+}
+
+function guiaPintar(p) {
+  const el = document.getElementById('guia-dica');
+  if (!el) return;
+  const emoji = document.getElementById('guia-emoji');
+  const titulo = document.getElementById('guia-titulo');
+  const sub = document.getElementById('guia-sub');
+  // Só escreve quando muda de passo: mexer no DOM a cada frame custaria layout
+  // sem nenhum ganho, já que o texto é o mesmo.
+  if (el.dataset.passo !== p.id) {
+    el.dataset.passo = p.id;
+    if (emoji) emoji.textContent = p.emoji;
+    if (titulo) titulo.textContent = p.txt;
+    if (sub) sub.textContent = p.sub;
+  }
+  el.classList.remove('hidden');
+}
+
+// Roda uma vez por frame, com quantos rostos o MediaPipe achou.
+function guiaTick(nRostos) {
+  const el = document.getElementById('guia-dica');
+  if (!el) return;
+  const T = window.GUIA;
+  const agora = performance.now();
+
+  if (!T.enabled) { el.classList.add('hidden'); return; }
+
+  // Tela vazia: esconde na hora, mas só REINICIA depois de reiniciarMs. A folga
+  // existe porque o rastreamento pisca (a pessoa vira o rosto, alguém passa na
+  // frente); sem ela o guia voltaria ao passo 1 no meio do uso.
+  if (nRostos === 0) {
+    if (!guia.semRostoDesde) guia.semRostoDesde = agora;
+    if (agora - guia.semRostoDesde > T.reiniciarMs) guiaReiniciar();
+    el.classList.add('hidden');
+    return;
+  }
+  guia.semRostoDesde = 0;
+
+  if (guia.concluido) { el.classList.add('hidden'); return; }
+  if (!guia.desde) guia.desde = agora;
+
+  const p = PASSOS_GUIA.find(x => !guia.feitos.has(x.id));
+  if (!p) { guia.concluido = true; el.classList.add('hidden'); return; }
+
+  // O último passo não tem gesto próprio para detectar (travar é justamente
+  // "parar de fazer gesto"), então ele sai sozinho depois de fimMs.
+  if (p.id === 'fim' && agora - guia.desde > T.fimMs) {
+    guia.concluido = true;
+    el.classList.add('hidden');
+    return;
+  }
+
+  guiaPintar(p);
+}
+
+// Exposto para ajuste ao vivo e diagnóstico pelo console, no mesmo espírito de
+// window.OCC / window.GEST / diagAstes. PASSOS_GUIA é `const`, e const de script
+// clássico NÃO vira propriedade de window sozinho — daí a atribuição explícita.
+//
+// ATENÇÃO: script.js é carregado com `type="module"` (ver index.html), e em
+// módulo NADA declarado no topo vira propriedade de window — nem `function`,
+// nem `const`. É por isso que tudo que precisa ser alcançado do console ou dos
+// testes tem de ser atribuído a window na mão, como já era o caso de diagAstes.
+window.PASSOS_GUIA = PASSOS_GUIA;
+window.guiaTick = guiaTick;
+window.guiaFeito = guiaFeito;
+window.guiaReiniciar = guiaReiniciar;
+window.guiaEstado = function () {
+  const p = PASSOS_GUIA.find(x => !guia.feitos.has(x.id));
+  return {
+    feitos: [...guia.feitos],
+    passoAtual: p ? p.id : null,
+    concluido: guia.concluido,
+    semRostoHa: guia.semRostoDesde ? Math.round(performance.now() - guia.semRostoDesde) : 0,
+  };
+};
 function hideGestureStatus() {
   const el = document.getElementById('hand-gesture-status');
   if (el) el.classList.remove('show');
@@ -1167,6 +1306,62 @@ function rebuildGlasses() {
   });
 }
 
+// Põe a imagem na proporção da TELA cortando o que não cabe, em vez de esticar.
+//
+// O truque é não mexer no sistema de coordenadas da cena: ele continua sendo
+// PIXELS DE VÍDEO, que é o que toda a matemática do rosto usa
+// (landmark.x * videoWidth). O que muda é só o que a câmera ENXERGA — a janela
+// ortográfica encolhe até ter a proporção da tela, e o que fica de fora dela
+// simplesmente não aparece. Assim nenhuma conta de posicionamento, escala ou
+// profundidade precisou ser tocada para a tela em pé funcionar.
+//
+// O sprite do vídeo continua com o tamanho inteiro (vw x vh) de propósito: é a
+// câmera que recorta, não ele. Encolher o sprite deixaria borda vazia na tela.
+function ajustarEnquadramento() {
+  if (!camera || !renderer || !video) return;
+  const vw = video.videoWidth || 640;
+  const vh = video.videoHeight || 480;
+  const cont = document.getElementById('threejs-container');
+  const tw = (cont && cont.clientWidth) || window.innerWidth || vw;
+  const th = (cont && cont.clientHeight) || window.innerHeight || vh;
+
+  const propVideo = vw / vh;
+  const propTela = tw / th;
+
+  // Um lado sempre cabe inteiro e o outro é cortado. Tela mais estreita que o
+  // vídeo (o caso da vitrine em pé) corta as laterais; tela mais larga corta em
+  // cima e embaixo. Nunca sobra barra preta, e nunca estica.
+  let visW, visH;
+  if (propTela < propVideo) { visH = vh; visW = vh * propTela; }
+  else { visW = vw; visH = vw / propTela; }
+
+  camera.left = -visW / 2;
+  camera.right = visW / 2;
+  camera.top = visH / 2;
+  camera.bottom = -visH / 2;
+  camera.updateProjectionMatrix();
+
+  // O canvas passa a ter a resolução da TELA, não a do vídeo. É isso que faz o
+  // `width:100%; height:100%` do CSS parar de deformar: agora as duas proporções
+  // são a mesma, então esticar para 100% não distorce mais nada.
+  renderer.setSize(tw, th);
+
+  ENQ.visW = visW; ENQ.visH = visH;
+  ENQ.fracX = visW / vw;
+  ENQ.fracY = visH / vh;
+}
+
+// Converte um x normalizado do VÍDEO (0..1) para x normalizado da TELA (0..1),
+// levando em conta o pedaço cortado. Sem crop os dois são a mesma coisa, então
+// numa tela deitada nada muda de comportamento.
+function xNaTela(xVideo) {
+  const inicio = 0.5 - ENQ.fracX / 2;
+  return clamp((xVideo - inicio) / Math.max(ENQ.fracX, 1e-4), 0, 1);
+}
+// Módulo não põe nada em window sozinho (ver o bloco do guia mais abaixo).
+window.xNaTela = xNaTela;
+window.ajustarEnquadramento = ajustarEnquadramento;
+
 async function initScene(videoEl) {
   video = videoEl;
   const vw = video.videoWidth || 640;
@@ -1186,6 +1381,8 @@ async function initScene(videoEl) {
 
   const container = document.getElementById('threejs-container');
   container.appendChild(renderer.domElement);
+  // Só depois de estar no DOM o container tem tamanho para medir.
+  ajustarEnquadramento();
 
   scene = new THREE.Scene();
 
@@ -1267,21 +1464,21 @@ async function initScene(videoEl) {
   // Os óculos e a máscara de cada pessoa são criados sob demanda, conforme os
   // rostos vão sendo detectados (ver createFaceSlot / matchSlot).
 
-  window.addEventListener('resize', () => {
+  const aoRedimensionar = () => {
     const vw2 = video.videoWidth || 640;
     const vh2 = video.videoHeight || 480;
-    camera.left = -vw2/2;
-    camera.right = vw2/2;
-    camera.top = vh2/2;
-    camera.bottom = -vh2/2;
-    camera.updateProjectionMatrix();
-    renderer.setSize(vw2, vh2);
+    // O sprite continua do tamanho INTEIRO do vídeo; quem recorta é a câmera.
     videoSprite.scale.set(vw2, vh2, 1);
     videoSprite.position.set(0, 0, 0);
     if (videoEnhanceMaterial.uniforms) {
       videoEnhanceMaterial.uniforms.uTexelSize.value.set(1.0 / vw2, 1.0 / vh2);
     }
-  });
+    ajustarEnquadramento();
+  };
+  window.addEventListener('resize', aoRedimensionar);
+  // Girar a tela da vitrine (ou o navegador entrar em tela cheia) nem sempre
+  // dispara 'resize' na hora certa; orientationchange cobre esse caso.
+  window.addEventListener('orientationchange', () => setTimeout(aoRedimensionar, 100));
 
   function animate() {
     requestAnimationFrame(animate);
@@ -1320,17 +1517,22 @@ async function initMediaPipe(delegate) {
   const dl = delegate || 'GPU';
   const VISION_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.7';
   try {
-    loadingText.textContent = 'Baixando motor de IA...';
+    // Legendas lúdicas em vez das técnicas: quem lê isto é uma criança parada na
+    // calçada, não quem programou. Cada frase continua dizendo o que está mesmo
+    // acontecendo — só que na linguagem do provador, não na do console.
+    loadingText.textContent = '🤖 Acordando o provador...';
     const vision = await withTimeout(
       import(`${VISION_CDN}/vision_bundle.mjs`), 15000, 'import vision_bundle'
     );
 
-    loadingText.textContent = 'Compilando WASM...';
+    loadingText.textContent = '🔧 Montando a bancada da ótica...';
     const fileset = await withTimeout(
       vision.FilesetResolver.forVisionTasks(`${VISION_CDN}/wasm`), 15000, 'FilesetResolver'
     );
 
-    loadingText.textContent = `Carregando modelo facial (${dl})...`;
+    // O (GPU)/(CPU) fica no fim, discreto: serve para diagnóstico à distância
+    // sem estragar a frase para quem está do lado de fora do vidro.
+    loadingText.textContent = `👀 Aprendendo a enxergar rostos... (${dl})`;
     faceLandmarker = await withTimeout(
       vision.FaceLandmarker.createFromOptions(fileset, {
         baseOptions: {
@@ -1347,7 +1549,7 @@ async function initMediaPipe(delegate) {
       }), 20000, 'FaceLandmarker'
     );
 
-    loadingText.textContent = 'Carregando modelo das mãos...';
+    loadingText.textContent = '🖐️ Aprendendo a ler as suas mãos...';
     handLandmarker = await withTimeout(
       vision.HandLandmarker.createFromOptions(fileset, {
         baseOptions: {
@@ -1683,6 +1885,10 @@ function runPrediction() {
     const detection = faceLandmarker.detectForVideo(video, performance.now());
     const faces = detection.faceLandmarks || [];
 
+    // O guia acompanha a presença de gente na tela: some quando não há ninguém e
+    // recomeça do zero para a próxima pessoa.
+    guiaTick(faces.length);
+
     if (faces.length > 0) {
       // Um conjunto de óculos + máscara por pessoa. Rostos que somem neste frame
       // têm o seu slot escondido logo abaixo.
@@ -1791,6 +1997,7 @@ function runPrediction() {
                 rebuildGlasses();
                 showToast(`Lente: ${opt.name}`);
                 showDwellFeedback(`Lente: ${opt.name} ✓`, 1);
+                guiaFeito('lente');
               } else {
                 showDwellFeedback(`Lente: ${opt.name}`, sel.progress);
               }
@@ -1815,13 +2022,22 @@ function runPrediction() {
                 const strip = document.getElementById('color-strip');
                 if (strip) strip.classList.add('active');
               }
-              const sensitiveX = clamp((0.47 - handXNormalized(handFrame)) / 0.38, 0, 1);
+              // Medido na TELA, e não no vídeo: numa vitrine em pé as laterais
+              // do vídeo estão cortadas, e a conta antiga pedia a mão em x=0.09
+              // do vídeo para chegar ao vermelho — um ponto que fica FORA da
+              // tela. A pessoa teria de mover a mão para onde não consegue se
+              // ver. Sem corte (tela deitada) xNaTela é identidade e o gesto
+              // continua exatamente como foi aprovado na câmera.
+              const sensitiveX = clamp((0.47 - xNaTela(handXNormalized(handFrame))) / 0.38, 0, 1);
 
               const fc = frameColorFromPosition(sensitiveX);
               if (fc.hex !== currentColor) {
                 currentColor = fc.hex;
                 gestureState.frameColorIdx = Math.round(sensitiveX * (FRAME_COLORS_RAINBOW.length - 1));
                 rebuildGlasses();
+                // Só conta como aprendido quando a cor MUDOU de fato: fechar a
+                // mão sem arrastar não ensina o gesto que a dica está pedindo.
+                guiaFeito('cor');
               }
 
               const needle = document.getElementById('color-needle');
@@ -1843,6 +2059,7 @@ function runPrediction() {
                     rebuildGlasses();
                     updateStyleMatrix(currentStyle);
                     showToast(`Modelo: ${STYLE_LABELS[styleId]}`);
+                    guiaFeito('modelo');
                   }
                   showDwellFeedback(`Modelo: ${STYLE_LABELS[styleId]} ✓`, 1);
                 } else {
@@ -1941,7 +2158,7 @@ async function startApp() {
   stopStream();
   errorOverlay.classList.add('hidden');
   loadingOverlay.classList.remove('hidden');
-  loadingText.textContent = 'Ativando câmera...';
+  loadingText.textContent = '📷 Ligando o espelho mágico...';
 
   try {
     console.log('[DEBUG] Requesting camera...');
@@ -1966,14 +2183,14 @@ async function startApp() {
     return;
   }
 
-  loadingText.textContent = 'Inicializando cena 3D...';
+  loadingText.textContent = '🕶️ Arrumando a vitrine de óculos...';
   await new Promise(r => setTimeout(r, 100));
 
   console.log('[DEBUG] Initializing scene...');
   await initScene(webcam);
   console.log('[DEBUG] Scene initialized');
 
-  loadingText.textContent = 'Carregando modelo de detecção facial...';
+  loadingText.textContent = '✨ Chamando o provador...';
 
   console.log('[DEBUG] Loading MediaPipe...');
   const ok = await initMediaPipe();
@@ -1992,7 +2209,7 @@ async function startApp() {
 
   console.log('[DEBUG] All ready!');
   autoRetryCount = 0;
-  loadingText.textContent = 'Pronto!';
+  loadingText.textContent = '😎 Pronto! Chegue mais perto';
   await new Promise(r => setTimeout(r, 200));
   loadingOverlay.classList.add('hidden');
 
