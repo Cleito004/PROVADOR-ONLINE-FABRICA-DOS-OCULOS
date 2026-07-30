@@ -1525,7 +1525,7 @@ async function initMediaPipe(delegate) {
       import(`${VISION_CDN}/vision_bundle.mjs`), 15000, 'import vision_bundle'
     );
 
-    loadingText.textContent = '🔧 Montando a bancada da ótica...';
+    loadingText.textContent = '🔧 Montando a bancada da ótica... 👓';
     const fileset = await withTimeout(
       vision.FilesetResolver.forVisionTasks(`${VISION_CDN}/wasm`), 15000, 'FilesetResolver'
     );
@@ -1549,7 +1549,7 @@ async function initMediaPipe(delegate) {
       }), 20000, 'FaceLandmarker'
     );
 
-    loadingText.textContent = '🖐️ Aprendendo a ler as suas mãos...';
+    loadingText.textContent = '🖐️ Aprendendo a ler as suas mãos... 🤚';
     handLandmarker = await withTimeout(
       vision.HandLandmarker.createFromOptions(fileset, {
         baseOptions: {
