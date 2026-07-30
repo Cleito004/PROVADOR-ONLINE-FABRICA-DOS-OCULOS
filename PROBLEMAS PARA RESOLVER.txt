@@ -6,7 +6,42 @@ Ajuste ao vivo pelo console: ver AJUSTES AO VIVO.txt
 Lista antiga (ate 29/07): git show ae64806:"PROBLEMAS PARA RESOLVER.txt"
 
 
-1) ASTES: comprimento  (relatado pelo supervisor em 30/07)
+1) ASTES: ponta retorcida virando um risco para baixo  (30/07, supervisor)
+   v4.31.0 FEITO, FALTA VER NA CAMERA
+
+   sintoma: com o rosto DE FRENTE aparecia um risco curto para baixo colado na
+   dobradica, dos dois lados (circulado no screenshot das 15:04).
+
+   causa MEDIDA nos GLB, e nao era "a ponta aparecendo cedo demais": o
+   encurtamento do v4.30.0 era mesh.scale.z, que COMPRIME em vez de cortar. o Z
+   encolhia e o Y NAO. a aste e reta nos primeiros 80% e so dobra nos ultimos
+   20% (a ponta que entra atras da orelha, caindo 15,6% do comprimento), entao
+   comprimir invertia a proporcao Y/Z da peca:
+
+       aste inteira        Y/Z = 0.24   (deitada, parece aste)
+       com minLen = 0.15   Y/Z = 1.58   (em pe, vira risco)  -> square/aviator
+                           Y/Z = 6.38   no cateye
+
+   ou seja: NENHUM valor de minLen consertaria: comprimir distorce em qualquer
+   k < 1. faltava mecanismo, nao numero - terceira vez seguida que e assim.
+
+   correcao: a aste passou a ser CORTADA, nao escalada. o pedaco alem do corte
+   nao e desenhado (discard no shader, em Z de MODELO). nenhum vertice se move,
+   entao a distorcao ficou impossivel por construcao; de frente sobra o toco
+   RETO, e a ponta retorcida volta sozinha quando o corte recua alem de 80% do
+   comprimento (~22 graus de giro). so a aste a mostra ganha a ponta - a de tras
+   segue apagada pela diferenca de profundidade, como ja era.
+
+   FALTA CONFERIR NA CAMERA:
+   - de frente ainda aparece algum risco para baixo -> baixe TEMPLE.minLen
+   - de frente sumiu aste demais                    -> suba TEMPLE.minLen (mas
+     acima de 0.80 a ponta retorcida volta para a vista frontal - era o defeito)
+   - a ponta demora a aparecer ao virar             -> baixe TEMPLE.showFull
+   no console: window.diagAstes() tem de dizer "pivo OK" e trazer corte:true nos
+   tres modelos. sem o corte a aste volta a aparecer inteira em qualquer angulo.
+
+
+2) ASTES: comprimento  (relatado pelo supervisor em 30/07)
    v4.30.0 FEITO, FALTA VER NA CAMERA
 
    sintoma nos 7 screenshots: com a cabeca abaixada as duas astes viravam dois
@@ -41,13 +76,13 @@ Lista antiga (ate 29/07): git show ae64806:"PROBLEMAS PARA RESOLVER.txt"
    tres modelos - sem pivo a aste apaga mas nao encurta.
 
 
-2) ATALHO NA VITRINE (ultimo passo para dar o projeto por encerrado)
+3) ATALHO NA VITRINE (ultimo passo para dar o projeto por encerrado)
    criar o atalho no PC da loja apontando para iniciar-vitrine.ps1 (area de
    trabalho ou pasta Inicializar), e na primeira abertura aceitar a permissao
    da camera marcando "lembrar". decidido em 30/07: roda em PC LOCAL, nao pelo
    site publicado.
 
 
-3) TESTAR COM CRIANCA DE VERDADE
+4) TESTAR COM CRIANCA DE VERDADE
    a escala ja acompanha o tamanho do rosto, entao nao deve ficar grande
    demais, mas proporcoes de rosto infantil so dao para conferir na pratica.

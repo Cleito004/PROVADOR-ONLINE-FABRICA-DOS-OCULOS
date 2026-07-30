@@ -192,6 +192,17 @@ window.TEMPLE = {
   //
   // Encurtar é melhor que só apagar porque é o que a realidade faz: a silhueta da
   // cabeça come a aste da ponta para a dobradiça, e não some com ela por inteiro.
+  //
+  // v4.31.0: este comprimento virou um CORTE, e deixou de ser uma escala. Escalar
+  // COMPRIMIA a aste (o Z encolhia, o Y não), o que punha a ponta retorcida em pé,
+  // colada na dobradiça — o risco vertical que se via de frente. Os quatro números
+  // abaixo continuam significando exatamente a mesma coisa; mudou só quem aplica o
+  // resultado (ver prepararCorteAste e applyTempleFade).
+  //
+  // A saber antes de mexer no minLen: como a aste é reta nos primeiros 80% e só
+  // dobra nos últimos 20%, a ponta retorcida só reaparece quando compVisivel passa
+  // de 0.80 — com estes valores, por volta de 22° de giro. Subir muito o minLen
+  // traz a ponta de volta para a vista de frente, que é o defeito que saiu daqui.
   showStart: 0.12, // giro (seno do yaw) em que a aste começa a crescer (~7°)
   showFull: 0.45,  // giro em que ela já está inteira (~27°)
   minLen: 0.15,    // fração do comprimento que sobra de frente / só inclinado
@@ -695,23 +706,28 @@ function splitFrameMesh(mesh, frameMat, leftMat, rightMat, geoHalfW, modelMinZ, 
   return {
     leftMesh, rightMesh,
     frameMesh: temFrente ? meshes[1] : null,
-    // A aste encolhe EM DIREÇÃO À DOBRADIÇA, não para o meio dela, senão ela se
-    // descolaria da armação ao encurtar. Para isso a malha precisa de um pai que
-    // segure a transformação original e a deixe livre para escalar em Z: é o que
-    // envolverEmPivo faz. A dobradiça é o extremo FRONTAL da aste (maxZ da fatia).
-    leftPivot: envolverEmPivo(leftMesh, leftZ.maxZ),
-    rightPivot: envolverEmPivo(rightMesh, rightZ.maxZ),
+    // A aste é comida DA PONTA PARA A DOBRADIÇA, como a silhueta da cabeça faz.
+    // A dobradiça é o extremo FRONTAL da fatia (maxZ) e a ponta o traseiro (minZ);
+    // é entre esses dois que o corte do shader corre. O pivô carrega a
+    // transformação do nó do GLB e deixa a malha com transformação neutra, de modo
+    // que o `position.z` que chega ao shader seja o Z cru da geometria — o mesmo
+    // em que estes dois extremos foram medidos.
+    leftPivot: envolverEmPivo(leftMesh, leftZ.maxZ, leftZ.minZ),
+    rightPivot: envolverEmPivo(rightMesh, rightZ.maxZ, rightZ.minZ),
     leftZ, rightZ,
   };
 }
 
 // Põe a malha dentro de um grupo que herda a transformação dela, deixando a malha
-// com transformação neutra. A partir daí escalar mesh.scale.z encurta a aste em
-// coordenadas do modelo, e compensar mesh.position.z mantém a dobradiça parada.
+// com transformação neutra. É o que garante que o `position.z` visto pelo shader
+// do corte seja o Z cru da geometria, e não o Z já torcido pela posição/rotação/
+// escala do nó do GLB — que varia de modelo para modelo.
 //
-// Sem esse pai não dava para encurtar sem brigar com a transformação que a malha
-// já trazia do GLB (posição/rotação/escala do nó), que varia de modelo para modelo.
-function envolverEmPivo(ms, hingeZ) {
+// (Até o v4.30.0 este pivô existia para poder escalar mesh.scale.z sem brigar com
+// a transformação do nó. O encurtamento por escala saiu no v4.31.0, mas o pivô
+// continua valendo pelo motivo acima e por manter centroNaCena medindo um
+// referencial que nunca é tocado.)
+function envolverEmPivo(ms, hingeZ, tipZ) {
   const pivo = new THREE.Group();
   pivo.position.copy(ms.position);
   pivo.quaternion.copy(ms.quaternion);
@@ -725,8 +741,51 @@ function envolverEmPivo(ms, hingeZ) {
   pivo.add(ms);
 
   ms.userData.hingeZ = hingeZ;
+  ms.userData.tipZ = tipZ;
   ms.userData.pivo = pivo;
   return pivo;
+}
+
+// CORTE DA ASTE (v4.31.0). O encurtamento era `mesh.scale.z = k`, e escalar
+// COMPRIME a aste em vez de cortá-la: o Z encolhe, o Y não. Medindo os GLB, a
+// aste é RETA nos primeiros 80% (queda em Y = 0.0000) e só dobra nos últimos 20%
+// — a ponta que passa atrás da orelha, que cai 15,6% do comprimento. Comprimindo,
+// a proporção Y/Z da peça inteira salta de 0.24 para 1.58 no square e para 6.38
+// no cateye: de DEITADA para EM PÉ. Era exatamente isso o risco vertical que
+// aparecia colado na dobradiça com o rosto de frente — a ponta retorcida
+// espremida contra a armação, não uma aste comprida demais.
+//
+// Uma cabeça de verdade não comprime a aste: ela TAPA a aste da ponta para a
+// dobradiça. Então a aste passa a ser CORTADA, não escalada — o pedaço além do
+// corte simplesmente não é desenhado. Com isso nenhum vértice se move, a
+// distorção fica impossível por construção, o pedaço visível fica no lugar
+// geométrico certo, e a ponta reaparece sozinha quando o corte recua o bastante.
+//
+// O corte é em Z de MODELO, dentro do shader, e não com THREE.Plane: planos do
+// Three.js são em coordenadas de MUNDO e precisariam ser recalculados a cada
+// frame e para cada pessoa — foi por isso que os planos antigos foram removidos
+// daqui. Como cada slot chama buildFromModel e ganha os seus próprios materiais
+// de aste, o corte de um rosto nunca alcança o de outro.
+function prepararCorteAste(mat) {
+  // O uniform mora no material para ser atualizado a cada frame sem recompilar:
+  // trocar o valor é de graça, mexer em define custaria um shader novo.
+  // -1e9 = nada cortado enquanto applyTempleFade não mandar o primeiro valor.
+  const corte = { value: -1e9 };
+  mat.userData.corteZ = corte;
+  mat.onBeforeCompile = shader => {
+    shader.uniforms.uCorteZ = corte;
+    // position é a coordenada CRUA da geometria, a mesma em que hingeZ e tipZ
+    // foram medidos — por isso o corte não depende da transformação do nó do GLB.
+    shader.vertexShader = 'varying float vAsteZ;\n' + shader.vertexShader.replace(
+      '#include <begin_vertex>',
+      '#include <begin_vertex>\n\tvAsteZ = position.z;'
+    );
+    shader.fragmentShader = 'varying float vAsteZ;\nuniform float uCorteZ;\n' + shader.fragmentShader.replace(
+      '#include <clipping_planes_fragment>',
+      '#include <clipping_planes_fragment>\n\tif ( vAsteZ < uCorteZ ) discard;'
+    );
+  };
+  return mat;
 }
 
 function buildFromModel(style, frameColor, lensColor, lensOpacity) {
@@ -738,12 +797,12 @@ function buildFromModel(style, frameColor, lensColor, lensOpacity) {
   const frameMat = new THREE.MeshStandardMaterial({
     color: frameColor, metalness: 0.0, roughness: 1.0, side: THREE.DoubleSide,
   });
-  const leftTempleMat = new THREE.MeshStandardMaterial({
+  const leftTempleMat = prepararCorteAste(new THREE.MeshStandardMaterial({
     color: frameColor, metalness: 0.0, roughness: 1.0, side: THREE.DoubleSide,
-  });
-  const rightTempleMat = new THREE.MeshStandardMaterial({
+  }));
+  const rightTempleMat = prepararCorteAste(new THREE.MeshStandardMaterial({
     color: frameColor, metalness: 0.0, roughness: 1.0, side: THREE.DoubleSide,
-  });
+  }));
   const lensMat = new THREE.MeshPhysicalMaterial({
     color: lensColor, transparent: true, opacity: lensOpacity,
     metalness: 0.0, roughness: 0.7, side: THREE.DoubleSide,
@@ -1040,17 +1099,47 @@ window.diagAstes = function () {
       return s + (i ? i.count / 3 : 0);
     }, 0);
     const todas = [...(g.userData.astesEsq || []), ...(g.userData.astesDir || [])];
+    // Extremos do lado INTEIRO: a dobradiça é o Z mais frontal e a ponta o mais
+    // traseiro, somando todas as malhas daquele lado (o cateye tem duas). É entre
+    // esses dois que o corte do shader corre — ver applyTempleFade.
+    const faixa = lista => {
+      let hinge = -Infinity, tip = Infinity;
+      (lista || []).forEach(m => {
+        if (typeof m.userData.hingeZ === 'number') hinge = Math.max(hinge, m.userData.hingeZ);
+        if (typeof m.userData.tipZ === 'number') tip = Math.min(tip, m.userData.tipZ);
+      });
+      return { hinge, tip, comp: hinge - tip };
+    };
     const d = {
       estilo, carregado: true,
       malhasEsq: (g.userData.astesEsq || []).length,
       malhasDir: (g.userData.astesDir || []).length,
       trisEsq: contaTris(g.userData.astesEsq),
       trisDir: contaTris(g.userData.astesDir),
-      // Sem pivô a aste até apaga, mas não encurta: encolheria para o meio dela e
-      // se descolaria da armação. Vale reportar, é o que o encurtamento exige.
+      // Sem pivô o `position.z` que chega ao shader viria torcido pela
+      // transformação do nó do GLB, e o corte cairia no lugar errado.
       pivo: todas.length > 0 && todas.every(m => !!m.userData.pivo),
+      faixaEsq: faixa(g.userData.astesEsq),
+      faixaDir: faixa(g.userData.astesDir),
+      // Sem o uniform do corte a aste volta a aparecer inteira em qualquer ângulo.
+      corte: !!(g.userData.leftTempleMat && g.userData.leftTempleMat.userData.corteZ
+        && g.userData.rightTempleMat && g.userData.rightTempleMat.userData.corteZ),
     };
     d.ok = d.malhasEsq > 0 && d.malhasDir > 0;
+    // DESENHA um frame com os materiais da aste. O corte vive num shader remendado
+    // à mão (prepararCorteAste), e GLSL quebrado não falha no JS: o Three.js só
+    // imprime "THREE.WebGLProgram: Shader Error" no console e a aste some da tela.
+    // Sem este passo o diagnóstico e os testes passariam com a aste invisível.
+    //
+    // Tem de ser render(), e não compile(): desde o r155 o Three.js adia a
+    // checagem de erro do shader para o primeiro USO do programa, então
+    // compile() liga e linka sem nunca relatar o erro.
+    d.compilou = !!(renderer && camera && scene);
+    if (d.compilou) {
+      scene.add(g);
+      renderer.render(scene, camera);
+      scene.remove(g);
+    }
     console.log(`[diag] ${estilo}: ${d.ok
       ? `astes separadas - esq ${d.malhasEsq} malha(s)/${d.trisEsq} tri, dir ${d.malhasDir}/${d.trisDir} - apagamento ativo, pivo ${d.pivo ? 'OK' : 'FALTANDO'}`
       : 'NAO separou - aste de tras fica so por conta da mascara'}`);
@@ -1454,13 +1543,27 @@ function applyTempleFade(slot, f) {
       const atualComp = slot[chaveComp] === undefined ? alvoComp : slot[chaveComp];
       slot[chaveComp] = atualComp + (alvoComp - atualComp) * T.lenFade;
 
-      // Escala em Z encurta a aste; a translação devolve a dobradiça ao lugar, de
-      // modo que ela encolhe para dentro da armação em vez de se descolar dela.
+      // O corte anda DA PONTA PARA A DOBRADIÇA, que é o caminho por onde a
+      // silhueta da cabeça come a aste. k = 1 deixa o corte no extremo traseiro
+      // (aste inteira, ponta retorcida inclusive); k = minLen o traz para perto da
+      // dobradiça e a ponta deixa de ser desenhada — sobra o toco RETO que os
+      // óculos reais mostram de frente. Nenhum vértice se move, então a ponta não
+      // tem como ser espremida contra a armação (ver prepararCorteAste).
+      //
+      // Dobradiça e ponta vêm do CONJUNTO do lado, não de cada malha: no cateye a
+      // aste chega em duas primitivas, em faixas de Z que não se sobrepõem, e são
+      // pedaços sequenciais da MESMA aste física. Um corte só para o lado inteiro
+      // as trata como a peça única que elas são.
       const k = Math.max(slot[chaveComp], 0.001);
+      let hinge = -Infinity, tip = Infinity;
       malhas.forEach(mesh => {
-        mesh.scale.z = k;
-        mesh.position.z = (mesh.userData.hingeZ || 0) * (1 - k);
+        const h = mesh.userData.hingeZ, t = mesh.userData.tipZ;
+        if (typeof h === 'number' && h > hinge) hinge = h;
+        if (typeof t === 'number' && t < tip) tip = t;
       });
+      if (mat.userData.corteZ && Number.isFinite(hinge) && Number.isFinite(tip)) {
+        mat.userData.corteZ.value = hinge - (hinge - tip) * k;
+      }
 
       mat.opacity = slot[chave];
       mat.depthWrite = slot[chave] > 0.5;

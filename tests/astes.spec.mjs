@@ -17,6 +17,15 @@ test.use({
 // e que a conta do encurtamento prende a dobradica no lugar.
 test('astes: corte, pivo e encurtamento', async ({ page }) => {
   test.setTimeout(120000); // carregar 3 GLB + MediaPipe pela CDN demora
+
+  // O corte da aste vive num shader remendado a mao, e GLSL quebrado NAO falha no
+  // JS: o Three.js so imprime o erro no console e a aste some da tela. Sem vigiar
+  // o console, todo o resto deste teste passaria com a aste invisivel.
+  const errosDeShader = [];
+  page.on('console', m => {
+    if (m.type() === 'error' && /shader|webglprogram|glsl/i.test(m.text())) errosDeShader.push(m.text());
+  });
+
   await page.goto('/');
 
   // Os GLB carregam de forma assincrona; diagAstes avisa quando ainda nao chegaram.
@@ -39,18 +48,54 @@ test('astes: corte, pivo e encurtamento', async ({ page }) => {
   expect(porEstilo.aviator.trisEsq).toBe(126);
   expect(porEstilo.cateye.malhasEsq).toBe(2);
 
-  // A conta do encurtamento: a dobradica fica parada, a ponta se aproxima dela.
-  const enc = await page.evaluate(() => {
-    const hingeZ = 0.37;
-    const mapear = (k, z) => hingeZ * (1 - k) + k * z;
-    return {
-      dobradicaK1: mapear(1, hingeZ), dobradicaK02: mapear(0.2, hingeZ),
-      pontaK1: mapear(1, hingeZ - 1), pontaK02: mapear(0.2, hingeZ - 1),
-    };
+  // O corte da aste (v4.31.0). Antes o encurtamento era mesh.scale.z, que
+  // COMPRIME: o Z encolhia e o Y nao, entao a ponta retorcida ficava em pe colada
+  // na dobradica - o risco vertical que aparecia de frente. Agora o pedaco alem do
+  // corte simplesmente nao e desenhado. Estas asserts medem a geometria REAL dos
+  // GLB carregados, e nao uma copia da conta.
+  // diagAstes ja compilou os materiais da aste (renderer.compile), entao um GLSL
+  // quebrado no corte ja teria aparecido aqui.
+  expect(errosDeShader, 'o shader do corte da aste nao compilou').toEqual([]);
+
+  for (const d of diag) {
+    expect(d.corte, `${d.estilo} sem o uniform do corte: a aste apareceria inteira`).toBe(true);
+    for (const [lado, f] of [['esq', d.faixaEsq], ['dir', d.faixaDir]]) {
+      expect(f.comp, `${d.estilo}/${lado} sem comprimento de aste`).toBeGreaterThan(0);
+    }
+  }
+
+  const corte = await page.evaluate(() => {
+    const T = window.TEMPLE;
+    // Mesma conta de applyTempleFade: o corte anda da ponta para a dobradica.
+    const onde = (hinge, tip, k) => hinge - (hinge - tip) * k;
+    // A ponta retorcida e os ultimos 20% da aste, medido nos GLB (ate 80% do
+    // comprimento a queda em Y e 0.0000; so depois disso ela dobra).
+    const inicioDaPonta = (hinge, tip) => hinge - (hinge - tip) * 0.80;
+    return window.diagAstes().map(d => {
+      const { hinge, tip } = d.faixaEsq;
+      return {
+        estilo: d.estilo,
+        // De frente / so inclinado: k = minLen.
+        corteDeFrente: onde(hinge, tip, T.minLen),
+        // De perfil: k = 1, nada cortado.
+        corteDePerfil: onde(hinge, tip, 1),
+        inicioDaPonta: inicioDaPonta(hinge, tip),
+        tip,
+      };
+    });
   });
-  console.log('ENCURTAMENTO:', JSON.stringify(enc));
-  expect(enc.dobradicaK02).toBeCloseTo(enc.dobradicaK1, 6);
-  expect(enc.pontaK02).toBeGreaterThan(enc.pontaK1);
+  console.log('CORTE:', JSON.stringify(corte));
+
+  for (const c of corte) {
+    // O DEFEITO CORRIGIDO: de frente o corte tem de cair ANTES da ponta comecar,
+    // senao a ponta retorcida volta a ser desenhada junto da dobradica.
+    expect(c.corteDeFrente,
+      `${c.estilo}: de frente o corte nao esconde a ponta retorcida`
+    ).toBeGreaterThan(c.inicioDaPonta);
+    // De perfil a aste sai inteira, ponta inclusive.
+    expect(c.corteDePerfil).toBeCloseTo(c.tip, 6);
+    expect(c.corteDePerfil).toBeLessThan(c.inicioDaPonta);
+  }
 
   // A revelacao por giro: de frente e so um toco, de perfil e inteira.
   const rev = await page.evaluate(() => {
